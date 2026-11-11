@@ -68,7 +68,10 @@ CLIENT_SECRET="${credentials[1]}"
 TENANT_ID="${credentials[2]}"
 SUBSCRIPTION_ID="${credentials[3]}"
 if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
-  printf '::add-mask::%s\n' "$CLIENT_SECRET" "${REGISTRY_PASSWORD:-}"
+  printf '::add-mask::%s\n' "$CLIENT_SECRET"
+  if [[ -n "${REGISTRY_PASSWORD:-}" ]]; then
+    printf '::add-mask::%s\n' "$REGISTRY_PASSWORD"
+  fi
 fi
 
 failure_reason="Unable to prepare temporary Azure CLI configuration."
@@ -175,9 +178,9 @@ print(fqdn)
 PY
 )
 PREVIEW_URL="http://${FQDN}:${CONTAINER_PORT}"
-failure_reason="Preview HTTP readiness failed; check application startup, PORT binding and ACI container logs."
+failure_reason="Preview HTTP readiness failed; check application startup, PORT binding, ACI container logs and public network reachability."
 curl --fail --silent --show-error --noproxy '*' --connect-timeout 5 --max-time 10 \
-  --retry 24 --retry-delay 5 --retry-all-errors --output /dev/null \
+  --retry 60 --retry-delay 5 --retry-all-errors --output /dev/null \
   "$PREVIEW_URL/" 2>"$work_dir/http-error.log"
 
 output_var status success
