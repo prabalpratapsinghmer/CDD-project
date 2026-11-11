@@ -1,0 +1,274 @@
+name: CI Pipeline and PR Status
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Pull Request Number for preview deployment'
+        required: false
+        default: '1'
+
+permissions:
+  contents: read
+  packages: write
+  pull-requests: write
+  statuses: write
+  issues: write
+
+jobs:
+  validate-and-build:
+    name: Validate and Build Image
+    runs-on: ubuntu-latest
+    outputs:
+      pr_number: ${{ steps.vars.outputs.pr_number }}
+      commit_sha: ${{ steps.vars.outputs.commit_sha }}
+      short_sha: ${{ steps.vars.outputs.short_sha }}
+      repo_lower: ${{ steps.vars.outputs.repo_lower }}
+      primary_image_tag: ${{ steps.vars.outputs.primary_image_tag }}
+      all_tags: ${{ steps.vars.outputs.all_tags }}
+    steps:
+      - name: Checkout PR Commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set Pipeline Variables
+        id: vars
+        run: |
+          PR_NUM="${{ github.event.pull_request.number || inputs.pr_number || '1' }}"
+          COMMIT="${{ github.event.pull_request.head.sha || github.sha }}"
+          SHORT="${COMMIT:0:7}"
+          REPO_LOWER=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
+          TAG_PR="ghcr.io/${REPO_LOWER}:pr-${PR_NUM}"
+          TAG_SHA="ghcr.io/${REPO_LOWER}:${COMMIT}"
+          TAG_PR_SHA="ghcr.io/${REPO_LOWER}:pr-${PR_NUM}-${SHORT}"
+          
+          echo "pr_number=${PR_NUM}" >> "$GITHUB_OUTPUT"
+          echo "commit_sha=${COMMIT}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHORT}" >> "$GITHUB_OUTPUT"
+          echo "repo_lower=${REPO_LOWER}" >> "$GITHUB_OUTPUT"
+          echo "primary_image_tag=${TAG_PR_SHA}" >> "$GITHUB_OUTPUT"
+          echo "tag_pr=${TAG_PR}" >> "$GITHUB_OUTPUT"
+          echo "tag_sha=${TAG_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest flake8
+
+      - name: Lint and Validate Syntax
+        run: |
+          python -m py_compile app.py
+          flake8 app.py tests/test_app.py
+
+      - name: Run Unit Tests
+        run: |
+          pytest -v tests/test_app.py
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ steps.vars.outputs.repo_lower }}:pr-${{ steps.vars.outputs.pr_number }}
+            ghcr.io/${{ steps.vars.outputs.repo_lower }}:${{ steps.vars.outputs.commit_sha }}
+            ghcr.io/${{ steps.vars.outputs.repo_lower }}:pr-${{ steps.vars.outputs.pr_number }}-${{ steps.vars.outputs.short_sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ steps.vars.outputs.commit_sha }}
+            org.opencontainers.image.title=cdd-project-pr-${{ steps.vars.outputs.pr_number }}
+
+  deploy-preview-and-status:
+    name: Deploy Preview and Report Status
+    needs: validate-and-build
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR Commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Resolve Context Variables
+        id: ctx
+        run: |
+          PR_NUM="${{ needs.validate-and-build.outputs.pr_number || github.event.pull_request.number || inputs.pr_number || '1' }}"
+          COMMIT="${{ needs.validate-and-build.outputs.commit_sha || github.event.pull_request.head.sha || github.sha }}"
+          SHORT="${COMMIT:0:7}"
+          REPO_LOWER=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_TAG="${{ needs.validate-and-build.outputs.primary_image_tag }}"
+          if [[ -z "${IMAGE_TAG}" ]]; then
+            IMAGE_TAG="ghcr.io/${REPO_LOWER}:pr-${PR_NUM}-${SHORT}"
+          fi
+          
+          echo "pr_number=${PR_NUM}" >> "$GITHUB_OUTPUT"
+          echo "commit_sha=${COMMIT}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHORT}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Execute Deployment Script
+        id: deploy
+        if: needs.validate-and-build.result == 'success'
+        env:
+          PR_NUMBER: ${{ steps.ctx.outputs.pr_number }}
+          IMAGE_REF: ${{ steps.ctx.outputs.image_tag }}
+          CONTAINER_PORT: 8080
+          RESOURCE_NAME: preview-pr-${{ steps.ctx.outputs.pr_number }}
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+          AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP || 'cdd-preview-rg' }}
+        run: |
+          chmod +x scripts/deploy-preview.sh
+          ./scripts/deploy-preview.sh
+
+      - name: Determine Aggregate Status
+        id: status_summary
+        run: |
+          BUILD_RES="${{ needs.validate-and-build.result }}"
+          DEPLOY_STAT="${{ steps.deploy.outputs.status || 'failure' }}"
+          PREVIEW_URL="${{ steps.deploy.outputs.url || '' }}"
+          ERR_MSG="${{ steps.deploy.outputs.error_message || '' }}"
+
+          if [[ "$BUILD_RES" != "success" ]]; then
+            DEPLOY_STAT="failure"
+            ERR_MSG="Application tests or Docker build failed during validation job."
+          fi
+
+          echo "final_deploy_status=${DEPLOY_STAT}" >> "$GITHUB_OUTPUT"
+          echo "preview_url=${PREVIEW_URL}" >> "$GITHUB_OUTPUT"
+          echo "error_message=${ERR_MSG}" >> "$GITHUB_OUTPUT"
+
+      - name: Update PR Comment and Commit Status Check
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = '${{ steps.ctx.outputs.pr_number }}';
+            const commitSha = '${{ steps.ctx.outputs.commit_sha }}';
+            const shortSha = '${{ steps.ctx.outputs.short_sha }}';
+            const imageTag = '${{ steps.ctx.outputs.image_tag }}';
+            const buildResult = '${{ needs.validate-and-build.result }}';
+            const deployStatus = '${{ steps.status_summary.outputs.final_deploy_status }}';
+            const previewUrl = '${{ steps.status_summary.outputs.preview_url }}';
+            const errorMessage = '${{ steps.status_summary.outputs.error_message }}';
+            
+            const isBuildPassed = buildResult === 'success';
+            let previewBadge = '🔴 Failed';
+            let commitState = 'failure';
+            let commitDesc = 'Preview deployment failed';
+            
+            if (isBuildPassed) {
+              if (deployStatus === 'success') {
+                previewBadge = '🟢 Ready';
+                commitState = 'success';
+                commitDesc = 'Preview environment is live';
+              } else if (deployStatus === 'pending_cloud_setup') {
+                previewBadge = '🟡 Image Published (Pending Cloud Setup)';
+                commitState = 'pending';
+                commitDesc = 'Image published to GHCR; awaiting cloud setup';
+              } else {
+                previewBadge = '🔴 Deployment Failed';
+                commitState = 'failure';
+                commitDesc = 'Deployment script failed';
+              }
+            } else {
+              commitState = 'failure';
+              commitDesc = 'Build or tests failed';
+            }
+
+            const urlDisplay = previewUrl ? `[${previewUrl}](${previewUrl})` : '_None_';
+            const buildBadge = isBuildPassed ? '✅ Passed' : '❌ Failed';
+            const errorSection = errorMessage 
+              ? `\n<details>\n<summary>⚠️ Diagnostic Details</summary>\n\n\`\`\`\n${errorMessage}\n\`\`\`\n</details>` 
+              : '';
+
+            const commentMarker = '<!-- cdd-pr-preview-status -->';
+            const commentBody = `${commentMarker}
+            ## 🚀 PR Preview Deployment Status
+
+            | Metric | Status | Details |
+            | :--- | :--- | :--- |
+            | **PR Revision** | \`#${prNumber}\` | Commit \`${shortSha}\` |
+            | **Build & Test** | ${buildBadge} | Python 3.9, Pytest, Flake8 |
+            | **Docker Image** | 📦 Published | \`${imageTag}\` |
+            | **Preview Environment** | ${previewBadge} | ${urlDisplay} |
+
+            *Deployment automated by Member 2 CI Pipeline. Comments update in-place per PR revision.*
+            ${errorSection}`.replace(/^[ ]{12}/gm, '');
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Update or create PR comment if PR number is available
+            if (prNumber) {
+              try {
+                const issueNumber = parseInt(prNumber, 10);
+                const { data: comments } = await github.rest.issues.listComments({
+                  owner,
+                  repo,
+                  issue_number: issueNumber
+                });
+                
+                const existing = comments.find(c => c.body && c.body.includes(commentMarker));
+                if (existing) {
+                  await github.rest.issues.updateComment({
+                    owner,
+                    repo,
+                    comment_id: existing.id,
+                    body: commentBody
+                  });
+                  console.log(`Updated existing PR status comment ID ${existing.id}`);
+                } else {
+                  await github.rest.issues.createComment({
+                    owner,
+                    repo,
+                    issue_number: issueNumber,
+                    body: commentBody
+                  });
+                  console.log(`Created new PR status comment on PR #${issueNumber}`);
+                }
+              } catch (err) {
+                console.warn(`Could not update PR comment (may not be an open PR in testing): ${err.message}`);
+              }
+            }
+
+            // Update commit status check
+            try {
+              await github.rest.repos.createCommitStatus({
+                owner,
+                repo,
+                sha: commitSha,
+                state: commitState,
+                target_url: previewUrl || undefined,
+                description: commitDesc,
+                context: 'PR Preview Deployment'
+              });
+              console.log(`Updated commit status check for ${commitSha} to ${commitState}`);
+            } catch (err) {
+              console.warn(`Could not update commit status: ${err.message}`);
+            }
+
+      - name: Enforce Pipeline Exit Status
+        if: needs.validate-and-build.result != 'success' || steps.status_summary.outputs.final_deploy_status == 'failure'
+        run: |
+          echo "Pipeline encountered a failure during validation or deployment." >&2
+          exit 1
