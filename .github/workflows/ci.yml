@@ -145,8 +145,6 @@ jobs:
           AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
           AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP || 'cdd-preview-rg' }}
           PREVIEW_DNS_PREFIX: ${{ vars.PREVIEW_DNS_PREFIX }}
-          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
-          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
         run: |
           chmod +x scripts/deploy-preview.sh
           ./scripts/deploy-preview.sh

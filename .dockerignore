@@ -1,0 +1,11 @@
+.git
+.venv
+.env
+.env.*
+__pycache__
+*.py[cod]
+.pytest_cache
+docs
+tests
+PROJECT_PLAN.md
+Readme.md

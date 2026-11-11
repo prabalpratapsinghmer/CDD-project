@@ -19,11 +19,19 @@ set -euo pipefail
 REPOSITORY="OWNER/REPO"                    # replace
 SUBSCRIPTION_ID="YOUR-NONPRODUCTION-SUBSCRIPTION-ID"
 RESOURCE_GROUP="cdd-preview-rg"
-LOCATION="eastus"                         # choose an ACI-supported region with quota
+LOCATION="koreacentral"                   # must be allowed by subscription policy and support ACI
 PREVIEW_DNS_PREFIX="yourrepo-preview"      # choose a stable, repository-specific value
 
 az login --output none                    # administrator interactive login
 az account set --subscription "$SUBSCRIPTION_ID"
+
+# Student subscriptions can restrict deployment regions. Pick an ACI-supported
+# region from this policy (or omit the flag if no such policy exists).
+az policy assignment list --scope "/subscriptions/${SUBSCRIPTION_ID}" \
+  --disable-scope-strict-match \
+  --query "[?displayName=='Allowed resource deployment regions'].parameters.listOfAllowedLocations.value" \
+  --output tsv
+
 az provider register --namespace Microsoft.ContainerInstance --wait --output none
 az group create --name "$RESOURCE_GROUP" --location "$LOCATION" --output none
 SCOPE="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}"
@@ -57,19 +65,36 @@ json.dump(credentials, sys.stdout)
 
 printf '%s' "$RESOURCE_GROUP" | gh secret set AZURE_RESOURCE_GROUP --repo "$REPOSITORY"
 gh variable set PREVIEW_DNS_PREFIX --body "$PREVIEW_DNS_PREFIX" --repo "$REPOSITORY"
+
+# `create-for-rbac --role` normally assigns this; verify and repair if it did not.
+SP_OBJECT_ID=$(az ad sp list --display-name "cdd-preview-deployer" \
+  --query "[0].id" --output tsv)
+az role assignment create \
+  --assignee-object-id "$SP_OBJECT_ID" \
+  --assignee-principal-type ServicePrincipal \
+  --role "Azure Container Instances Contributor Role" \
+  --scope "$SCOPE" --output none
+az role assignment list --assignee "$SP_OBJECT_ID" --scope "$SCOPE" \
+  --include-inherited \
+  --query "[?roleDefinitionName=='Azure Container Instances Contributor Role'].scope" \
+  --output tsv
 ```
 
 See the [Azure CLI service-principal reference](https://learn.microsoft.com/en-us/cli/azure/ad/sp#az-ad-sp-create-for-rbac). Do not blindly repeat creation to rotate credentials or leave orphan principals after a failed secret upload: inspect the application/role assignment in the administrator session and rotate its credential through your approved secret-management process. Record principal ID, group scope, credential expiry, and rotation owner, **not** the password. Rotate before expiry and update the GitHub secret through stdin again; revoke old credentials after verification.
 
 `PREVIEW_DNS_PREFIX` is a repository **variable**, not a secret: 1–30 lowercase letters/digits/hyphens, starts with a letter and ends with a letter/digit. Keep it unchanged throughout each PR's lifetime. Use a distinct group/prefix per repository to prevent ownership/name collisions.
 
-## 2. Persistent private GHCR pull authentication
+## 2. GHCR image access
 
-Member 2 still publishes with the job's `GITHUB_TOKEN`; preserve that integration. ACI can restart or pull after the Actions job ends, so **do not use `GITHUB_TOKEN` as the durable registry password**.
+Member 2 publishes revision-tagged images to GHCR. This repository's `cdd-project` container package is **public**, so ACI pulls the image anonymously. No `REGISTRY_USERNAME`/`REGISTRY_PASSWORD` secrets are needed; the deployment omits `imageRegistryCredentials` when both are empty.
 
-1. Use a dedicated bot account. Grant it **Read** access to only the intended private GHCR package (configure granular package permissions/inheritance accordingly).
-2. Create a personal access token **(classic)** with only `read:packages`; authorize organization SSO if required. Do not grant `write:packages`, `delete:packages`, or broad `repo` access. PAT classic scopes are not per-package: the bot's package permissions are what limit accessible packages. See [GitHub's GHCR authentication guidance](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic).
-3. Store the bot login as `REGISTRY_USERNAME` and PAT as `REGISTRY_PASSWORD`. Example in the trusted Bash session, without placing the PAT in shell history or command arguments:
+Public images are pullable by anyone. Keep secrets out of the image and build context; the included `.dockerignore` excludes local environments, Git metadata, and test/docs files.
+
+If the package is made private, ACI needs a durable read-only credential because it can restart after the Actions job ends:
+
+1. Use a dedicated bot account with **Read** access to only the intended GHCR package.
+2. Create a personal access token **(classic)** with only `read:packages`; authorize organization SSO if required. GitHub Packages does not support fine-grained PATs. See [GitHub's GHCR authentication guidance](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic).
+3. Store the bot login and token without placing the PAT in shell history or command arguments:
 
 ```bash
 printf '%s' 'YOUR-GHCR-BOT-LOGIN' | gh secret set REGISTRY_USERNAME --repo "$REPOSITORY"
@@ -79,7 +104,7 @@ printf '%s' "$REGISTRY_PASSWORD" | gh secret set REGISTRY_PASSWORD --repo "$REPO
 unset REGISTRY_PASSWORD
 ```
 
-ACI retains pull credentials in its container group configuration; resource-group access must remain restricted. Rotate/revoke the PAT on expiry or compromise, update the repository secret, and redeploy all active previews so ACI receives the replacement.
+Set both secrets or neither. Do not use `GITHUB_TOKEN` as the durable registry password; it expires after the job. ACI retains pull credentials in its container-group configuration, so keep resource-group access restricted. Rotate the PAT before expiry or after compromise, update the secret, and redeploy active previews.
 
 ## 3. Workflow and script interface
 
@@ -90,7 +115,7 @@ ACI retains pull credentials in its container group configuration; resource-grou
 | `AZURE_CREDENTIALS` | Required repository secret JSON containing `clientId`, `clientSecret`, `tenantId`, `subscriptionId` as nonempty single-line strings. No separate `AZURE_SUBSCRIPTION_ID` secret is used. |
 | `AZURE_RESOURCE_GROUP` | Existing repository secret interface, optional; defaults to `cdd-preview-rg`. Region is read from this existing group, not hardcoded in the script. |
 | `PREVIEW_DNS_PREFIX` | Required repository variable `vars.PREVIEW_DNS_PREFIX`, stable per repository. |
-| `REGISTRY_USERNAME`, `REGISTRY_PASSWORD` | Required repository secrets for durable private image pulls, as above. |
+| `REGISTRY_USERNAME`, `REGISTRY_PASSWORD` | Optional repository secrets for durable private image pulls; set both or neither. Omit for the public GHCR package used here. |
 | `CONTAINER_PORT` | Optional integer 1–65535, default `8080`; workflow uses `8080`. Exposed TCP port and application `PORT` environment variable. |
 | `RESOURCE_NAME` | Optional; if supplied, must equal `preview-pr-${PR_NUMBER}`. No arbitrary deployment target override. |
 | `GITHUB_OUTPUT` | Actions-provided output file; set a temporary file path to inspect outputs locally. |

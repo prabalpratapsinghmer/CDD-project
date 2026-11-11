@@ -175,6 +175,7 @@ def deployment(tmp_path):
 
     fixture = Deployment()
     fixture.served = served
+    fixture.port = server.server_port
     fixture.state_path = state_path
     try:
         yield fixture
@@ -226,6 +227,22 @@ def test_create_two_prs_then_update_one_preserves_other(deployment):
     assert response.stdout == 'ghcr.io/example/app:revision-two'
     assert deployment.served[-1] == (
         'preview-pr-42', 'ghcr.io/example/app:revision-two', '/',
+    )
+
+
+def test_public_image_deploys_without_registry_credentials(deployment):
+    result, outputs = deployment.run(
+        REGISTRY_USERNAME=None, REGISTRY_PASSWORD=None,
+        IMAGE_REF='ghcr.io/example/public:revision-one',
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert outputs['status'] == 'success'
+    assert outputs['url'] == f'http://127.0.0.1:{deployment.port}'
+    group = deployment.state()['containers']['preview-pr-41']
+    assert 'imageRegistryCredentials' not in group
+    assert (
+        group['containers'][0]['image']
+        == 'ghcr.io/example/public:revision-one'
     )
 
 

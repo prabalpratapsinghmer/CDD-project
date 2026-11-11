@@ -41,7 +41,7 @@ This repository includes an automated continuous integration (CI) pipeline imple
 
 3. **Real PR Preview Hosting (Member 3 — Pratham)**:
    - Invokes `scripts/deploy-preview.sh` after Member 2 publishes the revision-tagged GHCR image.
-   - Required inputs: `PR_NUMBER`, registry-qualified `IMAGE_REF`, `AZURE_CREDENTIALS` JSON (`clientId`, `clientSecret`, `tenantId`, `subscriptionId`), stable repository variable `PREVIEW_DNS_PREFIX`, and repository secrets `REGISTRY_USERNAME` / `REGISTRY_PASSWORD` for durable, read-only private GHCR pulls.
+   - Required inputs: `PR_NUMBER`, registry-qualified `IMAGE_REF`, `AZURE_CREDENTIALS` JSON (`clientId`, `clientSecret`, `tenantId`, `subscriptionId`), and stable repository variable `PREVIEW_DNS_PREFIX`. The GHCR package used here is public, so ACI pulls anonymously and no registry secrets are required; set `REGISTRY_USERNAME` / `REGISTRY_PASSWORD` only if the package is made private.
    - Preserves the optional `AZURE_RESOURCE_GROUP` secret (default `cdd-preview-rg`) and `CONTAINER_PORT` (default `8080`). `RESOURCE_NAME`, if provided, must equal `preview-pr-${PR_NUMBER}`.
    - Creates or updates only the PR's tagged ACI container group in a dedicated nonproduction resource group. Uses Linux, 1 vCPU/1 GiB, public TCP, `Always` restart, and the application `PORT` setting. Reads the group's region from Azure; protected DNS reuse and a stable prefix keep same-PR update addressing consistent.
    - Emits `status=success` and a URL only after verifying Azure provisioning, the requested image, the actual Azure FQDN, and HTTP GET `/` readiness. The URL is public HTTP, not HTTPS; use no sensitive data or application secrets.

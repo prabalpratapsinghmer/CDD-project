@@ -36,8 +36,10 @@ resource_group_pattern='^[a-zA-Z0-9_.()-]{1,90}$'
 image_pattern='^[a-z0-9.-]+(:[0-9]+)?/[a-z0-9._/-]+(:[A-Za-z0-9_][A-Za-z0-9_.-]*|@sha256:[a-f0-9]{64})$'
 [[ "$IMAGE_REF" =~ $image_pattern ]] || fail "IMAGE_REF must be a registry-qualified image with a tag or SHA256 digest."
 [[ -n "${AZURE_CREDENTIALS:-}" ]] || fail "AZURE_CREDENTIALS is required; no cloud preview has been deployed."
-[[ -n "${REGISTRY_USERNAME:-}" && -n "${REGISTRY_PASSWORD:-}" ]] || fail "REGISTRY_USERNAME and REGISTRY_PASSWORD are required for ACI image pulls."
-[[ "$REGISTRY_USERNAME$REGISTRY_PASSWORD" != *[[:cntrl:]]* ]] || fail "Registry credentials must not contain control characters."
+if [[ -n "${REGISTRY_USERNAME:-}" || -n "${REGISTRY_PASSWORD:-}" ]]; then
+  [[ -n "${REGISTRY_USERNAME:-}" && -n "${REGISTRY_PASSWORD:-}" ]] || fail "REGISTRY_USERNAME and REGISTRY_PASSWORD must be provided together."
+  [[ "$REGISTRY_USERNAME$REGISTRY_PASSWORD" != *[[:cntrl:]]* ]] || fail "Registry credentials must not contain control characters."
+fi
 
 for dependency in python3 az curl; do
   command -v "$dependency" >/dev/null || fail "Required deployment command is unavailable: ${dependency}."
@@ -128,11 +130,6 @@ definition = {
                 "resources": {"requests": {"cpu": 1, "memoryInGB": 1}},
             },
         }],
-        "imageRegistryCredentials": [{
-            "server": image.split("/")[0],
-            "username": os.environ["REGISTRY_USERNAME"],
-            "password": os.environ["REGISTRY_PASSWORD"],
-        }],
         "ipAddress": {
             "type": "Public",
             "ports": [{"port": port, "protocol": "TCP"}],
@@ -141,6 +138,13 @@ definition = {
         },
     },
 }
+registry_username = os.environ.get("REGISTRY_USERNAME")
+if registry_username:
+    definition["properties"]["imageRegistryCredentials"] = [{
+        "server": image.split("/")[0],
+        "username": registry_username,
+        "password": os.environ["REGISTRY_PASSWORD"],
+    }]
 with open(path, "w") as target:
     json.dump(definition, target)
 PY
