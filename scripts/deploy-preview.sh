@@ -10,7 +10,6 @@ output_var() {
   if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
     echo "${key}=${val}" >> "$GITHUB_OUTPUT"
   fi
-  echo "::set-output:: ${key}=${val}"
 }
 
 # Resolve input parameters
