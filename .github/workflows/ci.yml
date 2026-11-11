@@ -28,7 +28,6 @@ jobs:
       short_sha: ${{ steps.vars.outputs.short_sha }}
       repo_lower: ${{ steps.vars.outputs.repo_lower }}
       primary_image_tag: ${{ steps.vars.outputs.primary_image_tag }}
-      all_tags: ${{ steps.vars.outputs.all_tags }}
     steps:
       - name: Checkout PR Commit
         uses: actions/checkout@v4
@@ -159,18 +158,26 @@ jobs:
 
       - name: Update PR Comment and Commit Status Check
         uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.ctx.outputs.pr_number }}
+          COMMIT_SHA: ${{ steps.ctx.outputs.commit_sha }}
+          SHORT_SHA: ${{ steps.ctx.outputs.short_sha }}
+          IMAGE_TAG: ${{ steps.ctx.outputs.image_tag }}
+          BUILD_RESULT: ${{ needs.validate-and-build.result }}
+          DEPLOY_STATUS: ${{ steps.status_summary.outputs.final_deploy_status }}
+          PREVIEW_URL: ${{ steps.status_summary.outputs.preview_url }}
+          ERROR_MESSAGE: ${{ steps.status_summary.outputs.error_message }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const prNumber = '${{ steps.ctx.outputs.pr_number }}';
-            const commitSha = '${{ steps.ctx.outputs.commit_sha }}';
-            const shortSha = '${{ steps.ctx.outputs.short_sha }}';
-            const imageTag = '${{ steps.ctx.outputs.image_tag }}';
-            const buildResult = '${{ needs.validate-and-build.result }}';
-            const deployStatus = '${{ steps.status_summary.outputs.final_deploy_status }}';
-            const previewUrl = '${{ steps.status_summary.outputs.preview_url }}';
-            const errorMessage = '${{ steps.status_summary.outputs.error_message }}';
-            
+            const prNumber = process.env.PR_NUMBER;
+            const commitSha = process.env.COMMIT_SHA;
+            const shortSha = process.env.SHORT_SHA;
+            const imageTag = process.env.IMAGE_TAG;
+            const buildResult = process.env.BUILD_RESULT;
+            const deployStatus = process.env.DEPLOY_STATUS;
+            const previewUrl = process.env.PREVIEW_URL;
+            const errorMessage = process.env.ERROR_MESSAGE;
             const isBuildPassed = buildResult === 'success';
             let previewBadge = '🔴 Failed';
             let commitState = 'failure';
