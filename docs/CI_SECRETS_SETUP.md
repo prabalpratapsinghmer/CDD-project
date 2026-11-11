@@ -127,7 +127,7 @@ Resource name is always `preview-pr-N`. The DNS label is `${PREVIEW_DNS_PREFIX}-
 | Success | Exit 0, `status=success`, `url=http://<actual-Azure-FQDN>:<port>`, empty `error_message`; only after Azure reports `Succeeded`, the requested image matches, the FQDN is valid, and HTTP GET `/` passes. |
 | Failure | Nonzero exit, `status=failure`, empty `url`, fixed single-line non-secret `error_message`. No success URL or cloud-setup success fallback. A failed update may leave the old or partially updated resource: inspect it before retrying/cleanup. |
 
-HTTP readiness uses bounded curl retries (60 retries, 5-second retry delay, 5-second connection timeout, 10-second per-attempt limit) to cover ACI cold starts and FQDN propagation. It does not prove application revision content; validate that separately below. The script uses an isolated temporary Azure CLI configuration and removes it on exit, leaving the workstation's active Azure login/subscription unchanged. Raw Azure stderr is suppressed rather than published because it may expose credentials.
+HTTP readiness uses the ACI public IP with the FQDN Host header (`curl --resolve`) and bounded retries (60 retries, 5-second retry delay, 5-second connection timeout, 10-second per-attempt limit) to cover ACI cold starts and flaky runner DNS. It does not prove application revision content; validate that separately below. The script uses an isolated temporary Azure CLI configuration and removes it on exit, leaving the workstation's active Azure login/subscription unchanged. Raw Azure stderr is suppressed rather than published because it may expose credentials.
 
 The workflow runs the full `pytest -v` suite and `flake8 app.py tests`, preserves Member 2's GHCR tags and status/comment integration, and runs aggregate reporting plus final failure enforcement even after deployment failure. Output values enter the aggregate shell through environment variables, not interpolated shell source.
 
@@ -198,7 +198,23 @@ concurrency:
 
 Member 4's future close workflow must use **exactly the same group expression**, not a workflow-name-prefixed key, and `cancel-in-progress: false` so cleanup cannot race an active update. GitHub concurrency is not FIFO and keeps at most one pending run, so Member 4 must also guard against stale deployment after PR closure; shared serialization alone is not a closed-PR lifecycle implementation. Different PRs remain independent.
 
-### Two-PR live validation procedure (not observed evidence)
+### Observed live validation (2026-11-11)
+
+Environment: Azure for Students. The subscription's region policy allowed only `malaysiawest`, `koreacentral`, `eastasia`, `uaenorth`, and `polandcentral`, so previews use `cdd-preview-rg-koreacentral`. The deployer service principal has **Azure Container Instances Contributor** only at that group's scope. The GHCR package is public, so ACI pulls anonymously.
+
+| Check | Observed result |
+| --- | --- |
+| PR #3 preview | `preview-pr-3` at `http://pratham-cdd-preview-preview-pr-3.fnh7fkg5g4fjf2ba.koreacentral.azurecontainer.io:8080`; HTTP 200; content `Version: Base Setup...`; ACI `Succeeded`; ownership tags matched. |
+| Concurrent PR #4 preview | `preview-pr-4` at `http://pratham-cdd-preview-preview-pr-4.f2f6hzbsevddhhc7.koreacentral.azurecontainer.io:8080`; HTTP 200; content `Version: Isolation Test B2...`; ACI `Succeeded`; ownership tags matched. Both groups were listed at the same time. |
+| Update isolation | PR #4 was updated from `pr-4-7a84fdb` to `pr-4-8ff6cdb`. Its FQDN stayed the same and its content changed. PR #3's URL and content stayed unchanged. |
+| Cleanup | Temporary PR #4 was closed; its ownership tags were verified; only `preview-pr-4` was deleted. `preview-pr-3` remained and served its content. This was manual because close automation is Member 4's deliverable. |
+| Failure reporting | Missing/empty credentials and readiness failures produced a nonzero exit, `status=failure`, empty URL, and a fixed diagnostic. An initial cold-start readiness timeout left a running group; the next run recovered it. |
+
+A **first** ACI creation in `koreacentral` took more than 15 minutes before the FQDN was reliably reachable; warm updates took about 2.5–3 minutes. Readiness now connects to the ACI IP with the FQDN Host header and retries up to 60 times. Pre-warm a preview before a demo. Runner DNS/public-network reachability was intermittent; the IP probe removes DNS from the readiness path. Azure CLI calls now have timeouts and the deploy job has a 30-minute cap.
+
+Public HTTP demo only; do not send sensitive data. ACI groups bill while running. PR #3's preview remains until the PR is closed and Member 4 cleanup exists; remove it manually when it is no longer needed.
+
+### Repeat procedure for future live validation
 
 1. Complete provisioning/secrets and confirm quota for two previews. Open two trusted demo PRs A and B with visibly distinct page content. Record both PR numbers, commit SHAs, image references, resource names/tags, Actions run links, actual reported URLs, and HTTP response content/screenshots.
 2. Confirm each run is green only after readiness; use the reported URLs to verify A and B display their own content. Record actual Azure `Succeeded` state and requested image for each. URLs must differ between PRs.
@@ -226,13 +242,9 @@ assert all((resource.get("tags") or {}).get(k) == v for k, v in expected.items()
 
 Run separately for A and B; verify their absence and record cleanup outcomes. Do not delete if lookup/tag verification fails. This manual recovery procedure is not close-event automation.
 
-### Current evidence and blockers
-
-No live Azure create/update, private GHCR pull, stable-URL/two-PR validation, or cleanup evidence has been produced in this environment. No cloud credentials/subscription or repository deployment secrets are available; live Azure provisioning and concurrent verification have not been performed. An authorized administrator must provision/configure the cloud, registry credentials, repository secrets, and DNS-prefix variable and execute the procedure above; do not present the procedure, offline tests, or example names as observed cloud proof.
-
-Local verification completed:
+### Additional local verification
 - `bash -n scripts/deploy-preview.sh`, `flake8 app.py tests`, and `actionlint .github/workflows/ci.yml` passed.
-- `pytest -v`: **31 passed**, covering isolation/update behavior, ownership refusal, validation, credential-safe errors, invalid provisioning/image/FQDN results, and HTTP failure.
+- `pytest -v`: **33 passed**, covering isolation/update behavior, public and private registry paths, ownership refusal, validation, credential-safe errors, invalid provisioning/image/FQDN/IP results, and HTTP failure.
 - A separate smoke run executed the deployment shell with Azure CLI **2.92.0**'s real JSON-file loader, intercepted Azure requests, and real local HTTP responses. Two simulated groups coexisted; updating PR 31 kept its URL and left PR 32's response unchanged. Failure-reporting shell execution also removed a stale URL while retaining the failure reason.
 
-These checks prove local script/interface behavior only; they do not establish reachable Azure previews, private image pulls, or cloud isolation.
+These local checks complement, but do not replace, the live evidence above.

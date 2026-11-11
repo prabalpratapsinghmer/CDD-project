@@ -82,16 +82,16 @@ export AZURE_CONFIG_DIR="$work_dir/azure"
 
 # Raw CLI errors can contain registry credentials; publish only fixed stage diagnostics.
 failure_reason="Azure login failed; verify the service principal credentials and tenant."
-az login --service-principal --username "$CLIENT_ID" --password="$CLIENT_SECRET" \
+timeout 120 az login --service-principal --username "$CLIENT_ID" --password="$CLIENT_SECRET" \
   --tenant "$TENANT_ID" --output none >/dev/null 2>"$work_dir/azure-error.log"
 failure_reason="Azure subscription selection failed; verify subscriptionId and the scoped role."
-az account set --subscription "$SUBSCRIPTION_ID" >/dev/null 2>"$work_dir/azure-error.log"
+timeout 60 az account set --subscription "$SUBSCRIPTION_ID" >/dev/null 2>"$work_dir/azure-error.log"
 failure_reason="Preview resource group lookup failed; verify its existence and read permission."
-LOCATION=$(az group show --name "$AZURE_RESOURCE_GROUP" --query location --output tsv 2>"$work_dir/azure-error.log")
+LOCATION=$(timeout 60 az group show --name "$AZURE_RESOURCE_GROUP" --query location --output tsv 2>"$work_dir/azure-error.log")
 [[ "$LOCATION" =~ ^[a-z0-9]+$ ]] || fail "Azure returned no valid location for the preview resource group."
 
 failure_reason="Preview ownership lookup failed; verify container group read permission."
-az container list --resource-group "$AZURE_RESOURCE_GROUP" \
+timeout 60 az container list --resource-group "$AZURE_RESOURCE_GROUP" \
   --query "[?name=='${RESOURCE_NAME}']" --output json >"$work_dir/existing.json" 2>"$work_dir/azure-error.log"
 failure_reason="Refusing to overwrite an existing container group without matching preview ownership tags."
 python3 - "$work_dir/existing.json" "$PR_NUMBER" "$PREVIEW_DNS_PREFIX" <<'PY'
@@ -154,11 +154,11 @@ PY
 
 printf 'Deploying %s in preview resource group %s.\n' "$RESOURCE_NAME" "$AZURE_RESOURCE_GROUP"
 failure_reason="ACI create/update failed; check registry pull access, image existence, regional quota and group configuration."
-az container create --resource-group "$AZURE_RESOURCE_GROUP" --name "$RESOURCE_NAME" \
+timeout 600 az container create --resource-group "$AZURE_RESOURCE_GROUP" --name "$RESOURCE_NAME" \
   --file "$work_dir/group.json" --output none >/dev/null 2>"$work_dir/azure-error.log"
 
 failure_reason="ACI deployment inspection failed; verify container group read permission."
-az container show --resource-group "$AZURE_RESOURCE_GROUP" --name "$RESOURCE_NAME" \
+timeout 60 az container show --resource-group "$AZURE_RESOURCE_GROUP" --name "$RESOURCE_NAME" \
   --output json >"$work_dir/deployed.json" 2>"$work_dir/azure-error.log"
 failure_reason="ACI did not report a successful deployment of the requested image with a valid FQDN/IP."
 mapfile -t network < <(python3 - "$work_dir/deployed.json" "$IMAGE_REF" <<'PY'
