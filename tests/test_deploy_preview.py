@@ -69,6 +69,7 @@ elif command == 'container create':
     record['ipAddress']['fqdn'] = (
         '127.0.0.1' if name == 'preview-pr-41' else 'localhost'
     )
+    record['ipAddress']['ip'] = '127.0.0.1'
     state['containers'][name] = record
     state_path.write_text(json.dumps(state))
     print(json.dumps(record))
@@ -77,6 +78,8 @@ elif command == 'container show':
     fault = os.environ.get('FAKE_AZ_SHOW_FAULT')
     if fault == 'missing-fqdn':
         record['ipAddress']['fqdn'] = None
+    elif fault == 'missing-ip':
+        record['ipAddress']['ip'] = None
     elif fault == 'wrong-image':
         record['containers'][0]['image'] = 'ghcr.io/example/app:unexpected'
     elif fault == 'failed-provisioning':
@@ -296,6 +299,7 @@ def test_azure_errors_are_fail_closed_and_redacted(
 
 @pytest.mark.parametrize('fault, reason', [
     ('missing-fqdn', 'FQDN|hostname|DNS'),
+    ('missing-ip', 'FQDN/IP|IP|verif'),
     ('wrong-image', 'image|verif'),
     ('failed-provisioning', 'provision|deploy|verif'),
 ])

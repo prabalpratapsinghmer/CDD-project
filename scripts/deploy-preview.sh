@@ -160,27 +160,41 @@ az container create --resource-group "$AZURE_RESOURCE_GROUP" --name "$RESOURCE_N
 failure_reason="ACI deployment inspection failed; verify container group read permission."
 az container show --resource-group "$AZURE_RESOURCE_GROUP" --name "$RESOURCE_NAME" \
   --output json >"$work_dir/deployed.json" 2>"$work_dir/azure-error.log"
-failure_reason="ACI did not report a successful deployment of the requested image with a valid FQDN."
-FQDN=$(python3 - "$work_dir/deployed.json" "$IMAGE_REF" <<'PY'
+failure_reason="ACI did not report a successful deployment of the requested image with a valid FQDN/IP."
+mapfile -t network < <(python3 - "$work_dir/deployed.json" "$IMAGE_REF" <<'PY'
+import ipaddress
 import json
 import re
 import sys
 
 with open(sys.argv[1]) as source:
     group = json.load(source)
-fqdn = (group.get("ipAddress") or {}).get("fqdn")
+address = group.get("ipAddress") or {}
+fqdn = address.get("fqdn")
+ip = address.get("ip")
 containers = group.get("containers") or []
 if (group.get("provisioningState") != "Succeeded" or len(containers) != 1 or
         containers[0].get("image") != sys.argv[2] or not isinstance(fqdn, str) or
         not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?", fqdn)):
     sys.exit(1)
+try:
+    if ipaddress.ip_address(ip).version != 4:
+        sys.exit(1)
+except (TypeError, ValueError):
+    sys.exit(1)
 print(fqdn)
+print(ip)
 PY
 )
+[[ "${#network[@]}" -eq 2 ]] || fail "ACI did not report a successful deployment of the requested image with a valid FQDN/IP."
+FQDN="${network[0]}"
+CONTAINER_IP="${network[1]}"
 PREVIEW_URL="http://${FQDN}:${CONTAINER_PORT}"
 failure_reason="Preview HTTP readiness failed; check application startup, PORT binding, ACI container logs and public network reachability."
+# Runners can have flaky ACI DNS; connect to the known IP while preserving the FQDN Host header.
 curl --fail --silent --show-error --noproxy '*' --connect-timeout 5 --max-time 10 \
   --retry 60 --retry-delay 5 --retry-all-errors --output /dev/null \
+  --resolve "${FQDN}:${CONTAINER_PORT}:${CONTAINER_IP}" \
   "$PREVIEW_URL/" 2>"$work_dir/http-error.log"
 
 output_var status success
