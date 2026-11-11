@@ -70,6 +70,8 @@ jobs:
           flake8 app.py tests/test_app.py
 
       - name: Run Unit Tests
+        env:
+          PYTHONPATH: .
         run: |
           pytest -v tests/test_app.py
 
