@@ -1,113 +1,182 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 
-# scripts/deploy-preview.sh
-# Deployment interface contract between CI (Member 2) and Preview Hosting (Member 3).
-
+# Member 3 (Pratham): Member 2 calls this after publishing a revision-pinned image.
 output_var() {
-  local key="$1"
-  local val="$2"
   if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-    echo "${key}=${val}" >> "$GITHUB_OUTPUT"
+    printf '%s=%s\n' "$1" "$2" >> "$GITHUB_OUTPUT"
   fi
 }
 
-# Resolve input parameters
-PR_NUMBER="${PR_NUMBER:-1}"
+fail() {
+  printf 'ERROR: %s\n' "$1" >&2
+  output_var status failure
+  output_var url ""
+  output_var error_message "$1"
+  exit 1
+}
+
+failure_reason="Preview deployment failed."
+trap 'fail "$failure_reason"' ERR
+
+PR_NUMBER="${PR_NUMBER:-}"
 CONTAINER_PORT="${CONTAINER_PORT:-8080}"
-RESOURCE_NAME="${RESOURCE_NAME:-preview-pr-${PR_NUMBER}}"
 AZURE_RESOURCE_GROUP="${AZURE_RESOURCE_GROUP:-cdd-preview-rg}"
+PREVIEW_DNS_PREFIX="${PREVIEW_DNS_PREFIX:-}"
 IMAGE_REF="${IMAGE_REF:-}"
 
-echo "=== PR Preview Deployment Contract ==="
-echo "PR Number:        ${PR_NUMBER}"
-echo "Resource Name:    ${RESOURCE_NAME}"
-echo "Container Port:   ${CONTAINER_PORT}"
-echo "Target Image:     ${IMAGE_REF}"
-echo "Resource Group:   ${AZURE_RESOURCE_GROUP}"
+[[ "$PR_NUMBER" =~ ^[1-9][0-9]{0,9}$ ]] || fail "PR_NUMBER must be a positive integer of at most 10 digits."
+[[ "$CONTAINER_PORT" =~ ^[1-9][0-9]{0,4}$ ]] && (( CONTAINER_PORT <= 65535 )) || fail "CONTAINER_PORT must be between 1 and 65535."
+[[ "${RESOURCE_NAME:-preview-pr-${PR_NUMBER}}" == "preview-pr-${PR_NUMBER}" ]] || fail "RESOURCE_NAME must equal preview-pr-PR_NUMBER."
+RESOURCE_NAME="preview-pr-${PR_NUMBER}"
+[[ "$PREVIEW_DNS_PREFIX" =~ ^[a-z]([a-z0-9-]{0,28}[a-z0-9])?$ ]] || fail "PREVIEW_DNS_PREFIX must be a lowercase DNS prefix of 1 to 30 characters."
+resource_group_pattern='^[a-zA-Z0-9_.()-]{1,90}$'
+[[ "$AZURE_RESOURCE_GROUP" =~ $resource_group_pattern ]] || fail "AZURE_RESOURCE_GROUP must be a valid preview resource group name."
+image_pattern='^[a-z0-9.-]+(:[0-9]+)?/[a-z0-9._/-]+(:[A-Za-z0-9_][A-Za-z0-9_.-]*|@sha256:[a-f0-9]{64})$'
+[[ "$IMAGE_REF" =~ $image_pattern ]] || fail "IMAGE_REF must be a registry-qualified image with a tag or SHA256 digest."
+[[ -n "${AZURE_CREDENTIALS:-}" ]] || fail "AZURE_CREDENTIALS is required; no cloud preview has been deployed."
+[[ -n "${REGISTRY_USERNAME:-}" && -n "${REGISTRY_PASSWORD:-}" ]] || fail "REGISTRY_USERNAME and REGISTRY_PASSWORD are required for ACI image pulls."
+[[ "$REGISTRY_USERNAME$REGISTRY_PASSWORD" != *[[:cntrl:]]* ]] || fail "Registry credentials must not contain control characters."
 
-if [[ -z "${IMAGE_REF}" ]]; then
-  echo "ERROR: IMAGE_REF environment variable is required." >&2
-  output_var "status" "failure"
-  output_var "url" ""
-  output_var "error_message" "IMAGE_REF environment variable is required but was empty."
-  exit 1
+for dependency in python3 az curl; do
+  command -v "$dependency" >/dev/null || fail "Required deployment command is unavailable: ${dependency}."
+done
+
+failure_reason="AZURE_CREDENTIALS must contain clientId, clientSecret, tenantId and subscriptionId as nonempty single-line strings."
+credential_fields=$(python3 - <<'PY'
+import json
+import os
+import sys
+
+try:
+    credentials = json.loads(os.environ["AZURE_CREDENTIALS"])
+    fields = [credentials[key] for key in ("clientId", "clientSecret", "tenantId", "subscriptionId")]
+    if any(not isinstance(value, str) or not value.strip() or
+           any(ord(char) < 32 or ord(char) == 127 for char in value) for value in fields):
+        sys.exit(1)
+except (ValueError, KeyError, TypeError):
+    sys.exit(1)
+print("\n".join(fields))
+PY
+)
+mapfile -t credentials <<< "$credential_fields"
+CLIENT_ID="${credentials[0]}"
+CLIENT_SECRET="${credentials[1]}"
+TENANT_ID="${credentials[2]}"
+SUBSCRIPTION_ID="${credentials[3]}"
+if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
+  printf '::add-mask::%s\n' "$CLIENT_SECRET" "$REGISTRY_PASSWORD"
 fi
 
-# Check if Azure credentials are provided by Member 3
-if [[ -z "${AZURE_CREDENTIALS:-}" ]]; then
-  echo "AZURE_CREDENTIALS not set; image built and published. Cloud deployment awaits Member 3 secret configuration."
-  PREVIEW_URL="http://${RESOURCE_NAME}.eastus.azurecontainer.io:${CONTAINER_PORT}"
-  output_var "status" "pending_cloud_setup"
-  output_var "url" "${PREVIEW_URL}"
-  output_var "error_message" ""
-  exit 0
-fi
+failure_reason="Unable to prepare temporary Azure CLI configuration."
+work_dir=$(mktemp -d)
+trap 'rm -rf "$work_dir"' EXIT
+# Never change a developer's active subscription or reuse a production login.
+export AZURE_CONFIG_DIR="$work_dir/azure"
 
-echo "AZURE_CREDENTIALS detected. Initiating deployment to Azure Container Instances..."
+# Raw CLI errors can contain registry credentials; publish only fixed stage diagnostics.
+failure_reason="Azure login failed; verify the service principal credentials and tenant."
+az login --service-principal --username "$CLIENT_ID" --password="$CLIENT_SECRET" \
+  --tenant "$TENANT_ID" --output none >/dev/null 2>"$work_dir/azure-error.log"
+failure_reason="Azure subscription selection failed; verify subscriptionId and the scoped role."
+az account set --subscription "$SUBSCRIPTION_ID" >/dev/null 2>"$work_dir/azure-error.log"
+failure_reason="Preview resource group lookup failed; verify its existence and read permission."
+LOCATION=$(az group show --name "$AZURE_RESOURCE_GROUP" --query location --output tsv 2>"$work_dir/azure-error.log")
+[[ "$LOCATION" =~ ^[a-z0-9]+$ ]] || fail "Azure returned no valid location for the preview resource group."
 
-# Mask credentials if running in GitHub Actions
-if command -v jq >/dev/null 2>&1; then
-  CLIENT_ID=$(echo "${AZURE_CREDENTIALS}" | jq -r '.clientId // .appId // empty')
-  CLIENT_SECRET=$(echo "${AZURE_CREDENTIALS}" | jq -r '.clientSecret // .password // empty')
-  TENANT_ID=$(echo "${AZURE_CREDENTIALS}" | jq -r '.tenantId // .tenant // empty')
-  SUBSCRIPTION_ID=$(echo "${AZURE_CREDENTIALS}" | jq -r '.subscriptionId // empty')
-else
-  CLIENT_ID=$(python3 -c "import json, os; d=json.loads(os.environ['AZURE_CREDENTIALS']); print(d.get('clientId') or d.get('appId') or '')")
-  CLIENT_SECRET=$(python3 -c "import json, os; d=json.loads(os.environ['AZURE_CREDENTIALS']); print(d.get('clientSecret') or d.get('password') or '')")
-  TENANT_ID=$(python3 -c "import json, os; d=json.loads(os.environ['AZURE_CREDENTIALS']); print(d.get('tenantId') or d.get('tenant') or '')")
-  SUBSCRIPTION_ID=$(python3 -c "import json, os; d=json.loads(os.environ['AZURE_CREDENTIALS']); print(d.get('subscriptionId') or '')")
-fi
+failure_reason="Preview ownership lookup failed; verify container group read permission."
+az container list --resource-group "$AZURE_RESOURCE_GROUP" \
+  --query "[?name=='${RESOURCE_NAME}']" --output json >"$work_dir/existing.json" 2>"$work_dir/azure-error.log"
+failure_reason="Refusing to overwrite an existing container group without matching preview ownership tags."
+python3 - "$work_dir/existing.json" "$PR_NUMBER" "$PREVIEW_DNS_PREFIX" <<'PY'
+import json
+import sys
 
-if [[ -z "${CLIENT_ID}" || -z "${CLIENT_SECRET}" || -z "${TENANT_ID}" ]]; then
-  echo "ERROR: AZURE_CREDENTIALS JSON missing required fields (clientId, clientSecret, tenantId)." >&2
-  output_var "status" "failure"
-  output_var "url" ""
-  output_var "error_message" "Malformed AZURE_CREDENTIALS secret: missing required service principal keys."
-  exit 1
-fi
+with open(sys.argv[1]) as source:
+    groups = json.load(source)
+expected = {"managed-by": "cdd-preview", "pr-number": sys.argv[2], "preview-owner": sys.argv[3]}
+if len(groups) > 1 or any(any((group.get("tags") or {}).get(key) != value
+                            for key, value in expected.items()) for group in groups):
+    sys.exit(1)
+PY
 
-# Execute deployment and capture output safely
-deploy_err_file=$(mktemp)
-trap 'rm -f "${deploy_err_file}"' EXIT
+failure_reason="Unable to prepare the ACI deployment definition."
+# The CLI has no DNS reuse-policy flag; its JSON file interface supports the ARM property.
+python3 - "$work_dir/group.json" "$RESOURCE_NAME" "$LOCATION" "$IMAGE_REF" "$CONTAINER_PORT" "$PR_NUMBER" "$PREVIEW_DNS_PREFIX" <<'PY'
+import json
+import os
+import sys
 
-if ! az login --service-principal -u "${CLIENT_ID}" -p "${CLIENT_SECRET}" --tenant "${TENANT_ID}" > /dev/null 2>"${deploy_err_file}"; then
-  SANITIZED_ERR=$(head -n 5 "${deploy_err_file}" | tr '\n' ' ')
-  echo "ERROR: Azure service principal authentication failed: ${SANITIZED_ERR}" >&2
-  output_var "status" "failure"
-  output_var "url" ""
-  output_var "error_message" "Azure login failed: ${SANITIZED_ERR}"
-  exit 1
-fi
+path, name, location, image, port, pr_number, prefix = sys.argv[1:]
+port = int(port)
+definition = {
+    "apiVersion": "2021-10-01",
+    "type": "Microsoft.ContainerInstance/containerGroups",
+    "name": name,
+    "location": location,
+    "tags": {"managed-by": "cdd-preview", "pr-number": pr_number, "preview-owner": prefix},
+    "properties": {
+        "osType": "Linux",
+        "restartPolicy": "Always",
+        "containers": [{
+            "name": name,
+            "properties": {
+                "image": image,
+                "ports": [{"port": port, "protocol": "TCP"}],
+                "environmentVariables": [{"name": "PORT", "value": str(port)}],
+                "resources": {"requests": {"cpu": 1, "memoryInGB": 1}},
+            },
+        }],
+        "imageRegistryCredentials": [{
+            "server": image.split("/")[0],
+            "username": os.environ["REGISTRY_USERNAME"],
+            "password": os.environ["REGISTRY_PASSWORD"],
+        }],
+        "ipAddress": {
+            "type": "Public",
+            "ports": [{"port": port, "protocol": "TCP"}],
+            "dnsNameLabel": f"{prefix}-{name}",
+            "autoGeneratedDomainNameLabelScope": "ResourceGroupReuse",
+        },
+    },
+}
+with open(path, "w") as target:
+    json.dump(definition, target)
+PY
 
-if [[ -n "${SUBSCRIPTION_ID}" ]]; then
-  az account set --subscription "${SUBSCRIPTION_ID}" > /dev/null 2>&1 || true
-fi
+printf 'Deploying %s in preview resource group %s.\n' "$RESOURCE_NAME" "$AZURE_RESOURCE_GROUP"
+failure_reason="ACI create/update failed; check registry pull access, image existence, regional quota and group configuration."
+az container create --resource-group "$AZURE_RESOURCE_GROUP" --name "$RESOURCE_NAME" \
+  --file "$work_dir/group.json" --output none >/dev/null 2>"$work_dir/azure-error.log"
 
-echo "Deploying container group ${RESOURCE_NAME} with image ${IMAGE_REF}..."
-if ! az container create \
-  --resource-group "${AZURE_RESOURCE_GROUP}" \
-  --name "${RESOURCE_NAME}" \
-  --image "${IMAGE_REF}" \
-  --dns-name-label "${RESOURCE_NAME}" \
-  --ports "${CONTAINER_PORT}" \
-  --environment-variables PORT="${CONTAINER_PORT}" \
-  --output json > /dev/null 2>"${deploy_err_file}"; then
-  SANITIZED_ERR=$(head -n 5 "${deploy_err_file}" | tr '\n' ' ')
-  echo "ERROR: az container create failed: ${SANITIZED_ERR}" >&2
-  output_var "status" "failure"
-  output_var "url" ""
-  output_var "error_message" "ACI deployment failed: ${SANITIZED_ERR}"
-  exit 1
-fi
+failure_reason="ACI deployment inspection failed; verify container group read permission."
+az container show --resource-group "$AZURE_RESOURCE_GROUP" --name "$RESOURCE_NAME" \
+  --output json >"$work_dir/deployed.json" 2>"$work_dir/azure-error.log"
+failure_reason="ACI did not report a successful deployment of the requested image with a valid FQDN."
+FQDN=$(python3 - "$work_dir/deployed.json" "$IMAGE_REF" <<'PY'
+import json
+import re
+import sys
 
-FQDN=$(az container show --resource-group "${AZURE_RESOURCE_GROUP}" --name "${RESOURCE_NAME}" --query "ipAddress.fqdn" -o tsv 2>/dev/null || true)
-if [[ -z "${FQDN}" || "${FQDN}" == "null" ]]; then
-  FQDN="${RESOURCE_NAME}.eastus.azurecontainer.io"
-fi
-
+with open(sys.argv[1]) as source:
+    group = json.load(source)
+fqdn = (group.get("ipAddress") or {}).get("fqdn")
+containers = group.get("containers") or []
+if (group.get("provisioningState") != "Succeeded" or len(containers) != 1 or
+        containers[0].get("image") != sys.argv[2] or not isinstance(fqdn, str) or
+        not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?", fqdn)):
+    sys.exit(1)
+print(fqdn)
+PY
+)
 PREVIEW_URL="http://${FQDN}:${CONTAINER_PORT}"
-echo "Deployment successful: ${PREVIEW_URL}"
-output_var "status" "success"
-output_var "url" "${PREVIEW_URL}"
-output_var "error_message" ""
+failure_reason="Preview HTTP readiness failed; check application startup, PORT binding and ACI container logs."
+curl --fail --silent --show-error --noproxy '*' --connect-timeout 5 --max-time 10 \
+  --retry 24 --retry-delay 5 --retry-all-errors --output /dev/null \
+  "$PREVIEW_URL/" 2>"$work_dir/http-error.log"
+
+output_var status success
+output_var url "$PREVIEW_URL"
+output_var error_message ""
+printf 'Preview is reachable: %s\n' "$PREVIEW_URL"

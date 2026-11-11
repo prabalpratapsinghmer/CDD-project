@@ -18,6 +18,11 @@ permissions:
   statuses: write
   issues: write
 
+# Member 4's close workflow must use this same per-PR group.
+concurrency:
+  group: cdd-preview-pr-${{ github.event.pull_request.number || inputs.pr_number || '1' }}
+  cancel-in-progress: false
+
 jobs:
   validate-and-build:
     name: Validate and Build Image
@@ -36,9 +41,10 @@ jobs:
 
       - name: Set Pipeline Variables
         id: vars
+        env:
+          PR_NUM: ${{ github.event.pull_request.number || inputs.pr_number || '1' }}
+          COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          PR_NUM="${{ github.event.pull_request.number || inputs.pr_number || '1' }}"
-          COMMIT="${{ github.event.pull_request.head.sha || github.sha }}"
           SHORT="${COMMIT:0:7}"
           REPO_LOWER=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
           TAG_PR="ghcr.io/${REPO_LOWER}:pr-${PR_NUM}"
@@ -67,13 +73,13 @@ jobs:
       - name: Lint and Validate Syntax
         run: |
           python -m py_compile app.py
-          flake8 app.py tests/test_app.py
+          flake8 app.py tests
 
       - name: Run Unit Tests
         env:
           PYTHONPATH: .
         run: |
-          pytest -v tests/test_app.py
+          pytest -v
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -112,12 +118,13 @@ jobs:
 
       - name: Resolve Context Variables
         id: ctx
+        env:
+          PR_NUM: ${{ needs.validate-and-build.outputs.pr_number || github.event.pull_request.number || inputs.pr_number || '1' }}
+          COMMIT: ${{ needs.validate-and-build.outputs.commit_sha || github.event.pull_request.head.sha || github.sha }}
+          IMAGE_TAG: ${{ needs.validate-and-build.outputs.primary_image_tag }}
         run: |
-          PR_NUM="${{ needs.validate-and-build.outputs.pr_number || github.event.pull_request.number || inputs.pr_number || '1' }}"
-          COMMIT="${{ needs.validate-and-build.outputs.commit_sha || github.event.pull_request.head.sha || github.sha }}"
           SHORT="${COMMIT:0:7}"
           REPO_LOWER=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
-          IMAGE_TAG="${{ needs.validate-and-build.outputs.primary_image_tag }}"
           if [[ -z "${IMAGE_TAG}" ]]; then
             IMAGE_TAG="ghcr.io/${REPO_LOWER}:pr-${PR_NUM}-${SHORT}"
           fi
@@ -137,21 +144,34 @@ jobs:
           RESOURCE_NAME: preview-pr-${{ steps.ctx.outputs.pr_number }}
           AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
           AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP || 'cdd-preview-rg' }}
+          PREVIEW_DNS_PREFIX: ${{ vars.PREVIEW_DNS_PREFIX }}
+          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
         run: |
           chmod +x scripts/deploy-preview.sh
           ./scripts/deploy-preview.sh
 
       - name: Determine Aggregate Status
         id: status_summary
+        if: always()
+        env:
+          BUILD_RES: ${{ needs.validate-and-build.result }}
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          DEPLOY_STAT: ${{ steps.deploy.outputs.status || 'failure' }}
+          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
+          ERR_MSG: ${{ steps.deploy.outputs.error_message }}
         run: |
-          BUILD_RES="${{ needs.validate-and-build.result }}"
-          DEPLOY_STAT="${{ steps.deploy.outputs.status || 'failure' }}"
-          PREVIEW_URL="${{ steps.deploy.outputs.url || '' }}"
-          ERR_MSG="${{ steps.deploy.outputs.error_message || '' }}"
 
           if [[ "$BUILD_RES" != "success" ]]; then
             DEPLOY_STAT="failure"
             ERR_MSG="Application tests or Docker build failed during validation job."
+          elif [[ "$DEPLOY_OUTCOME" != "success" || "$DEPLOY_STAT" != "success" ]]; then
+            DEPLOY_STAT="failure"
+            ERR_MSG="${ERR_MSG:-Preview deployment did not complete successfully.}"
+          fi
+
+          if [[ "$DEPLOY_STAT" != "success" ]]; then
+            PREVIEW_URL=""
           fi
 
           echo "final_deploy_status=${DEPLOY_STAT}" >> "$GITHUB_OUTPUT"
@@ -159,6 +179,7 @@ jobs:
           echo "error_message=${ERR_MSG}" >> "$GITHUB_OUTPUT"
 
       - name: Update PR Comment and Commit Status Check
+        if: always()
         uses: actions/github-script@v7
         env:
           PR_NUMBER: ${{ steps.ctx.outputs.pr_number }}
@@ -190,10 +211,6 @@ jobs:
                 previewBadge = '🟢 Ready';
                 commitState = 'success';
                 commitDesc = 'Preview environment is live';
-              } else if (deployStatus === 'pending_cloud_setup') {
-                previewBadge = '🟡 Image Published (Pending Cloud Setup)';
-                commitState = 'success';
-                commitDesc = 'Image published to GHCR; awaiting cloud setup';
               } else {
                 previewBadge = '🔴 Deployment Failed';
                 commitState = 'failure';
@@ -218,7 +235,7 @@ jobs:
             | :--- | :--- | :--- |
             | **PR Revision** | \`#${prNumber}\` | Commit \`${shortSha}\` |
             | **Build & Test** | ${buildBadge} | Python 3.11, Pytest, Flake8 |
-            | **Docker Image** | 📦 Published | \`${imageTag}\` |
+            | **Docker Image** | ${isBuildPassed ? 'Published' : 'Not published'} | \`${imageTag}\` |
             | **Preview Environment** | ${previewBadge} | ${urlDisplay} |
 
             *Deployment automated by Member 2 CI Pipeline. Comments update in-place per PR revision.*
@@ -277,7 +294,7 @@ jobs:
             }
 
       - name: Enforce Pipeline Exit Status
-        if: needs.validate-and-build.result != 'success' || steps.status_summary.outputs.final_deploy_status == 'failure'
+        if: always() && (needs.validate-and-build.result != 'success' || steps.deploy.outcome != 'success' || steps.status_summary.outputs.final_deploy_status != 'success')
         run: |
           echo "Pipeline encountered a failure during validation or deployment." >&2
           exit 1
