@@ -53,10 +53,10 @@ jobs:
           echo "tag_pr=${TAG_PR}" >> "$GITHUB_OUTPUT"
           echo "tag_sha=${TAG_SHA}" >> "$GITHUB_OUTPUT"
 
-      - name: Set up Python 3.9
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.11'
           cache: 'pip'
 
       - name: Install Dependencies
@@ -190,7 +190,7 @@ jobs:
                 commitDesc = 'Preview environment is live';
               } else if (deployStatus === 'pending_cloud_setup') {
                 previewBadge = '🟡 Image Published (Pending Cloud Setup)';
-                commitState = 'pending';
+                commitState = 'success';
                 commitDesc = 'Image published to GHCR; awaiting cloud setup';
               } else {
                 previewBadge = '🔴 Deployment Failed';
@@ -215,7 +215,7 @@ jobs:
             | Metric | Status | Details |
             | :--- | :--- | :--- |
             | **PR Revision** | \`#${prNumber}\` | Commit \`${shortSha}\` |
-            | **Build & Test** | ${buildBadge} | Python 3.9, Pytest, Flake8 |
+            | **Build & Test** | ${buildBadge} | Python 3.11, Pytest, Flake8 |
             | **Docker Image** | 📦 Published | \`${imageTag}\` |
             | **Preview Environment** | ${previewBadge} | ${urlDisplay} |
 

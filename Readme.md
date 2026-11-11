@@ -26,7 +26,7 @@ This repository includes an automated continuous integration (CI) pipeline imple
 ### Pipeline Stages
 
 1. **Validation & Testing**:
-   - Python 3.9 environment with pip caching.
+   - Python 3.11 environment with pip caching.
    - Syntax compilation check (`python -m py_compile app.py`).
    - Linting check (`flake8 app.py tests/test_app.py`).
    - Automated unit test suite (`pytest -v tests/test_app.py`).
