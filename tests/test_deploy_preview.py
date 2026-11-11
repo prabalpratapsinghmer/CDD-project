@@ -131,6 +131,7 @@ def deployment(tmp_path):
         'PR_NUMBER': '41',
         'IMAGE_REF': 'ghcr.io/example/app:revision-one',
         'AZURE_CREDENTIALS': credentials,
+        'GITHUB_ACTIONS': 'true',
         'PREVIEW_DNS_PREFIX': 'test-preview',
         'REGISTRY_USERNAME': 'preview-reader',
         'REGISTRY_PASSWORD': REGISTRY_PASSWORD,
@@ -156,8 +157,12 @@ def deployment(tmp_path):
                 line.split('=', 1) for line in output_text.splitlines()
             )
             logs = result.stdout + result.stderr + output_text
-            assert CLIENT_SECRET not in logs
-            assert REGISTRY_PASSWORD not in logs
+            visible = '\n'.join(
+                line for line in logs.splitlines()
+                if not line.startswith('::add-mask::')
+            )
+            assert CLIENT_SECRET not in visible
+            assert REGISTRY_PASSWORD not in visible
             return result, outputs
 
         def state(self):

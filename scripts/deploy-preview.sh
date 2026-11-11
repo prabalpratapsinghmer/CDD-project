@@ -68,7 +68,7 @@ CLIENT_SECRET="${credentials[1]}"
 TENANT_ID="${credentials[2]}"
 SUBSCRIPTION_ID="${credentials[3]}"
 if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
-  printf '::add-mask::%s\n' "$CLIENT_SECRET" "$REGISTRY_PASSWORD"
+  printf '::add-mask::%s\n' "$CLIENT_SECRET" "${REGISTRY_PASSWORD:-}"
 fi
 
 failure_reason="Unable to prepare temporary Azure CLI configuration."
