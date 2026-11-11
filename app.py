@@ -9,7 +9,7 @@ def home():
     # Content is clearly visible to make PR changes easy to recognize
     return """
     <h1>CDD Project - PR Preview Environment</h1>
-    <p>Version: Base Setup (Change this text to test PR updates)</p>
+    <p>Version: Isolation Test B (temporary preview validation)</p>
     """
 
 
