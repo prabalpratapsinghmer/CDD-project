@@ -28,8 +28,8 @@ This repository includes an automated continuous integration (CI) pipeline imple
 1. **Validation & Testing**:
    - Python 3.11 environment with pip caching.
    - Syntax compilation check (`python -m py_compile app.py`).
-   - Linting check (`flake8 app.py tests/test_app.py`).
-   - Automated unit test suite (`pytest -v tests/test_app.py`).
+   - Linting check (`flake8 app.py tests`).
+   - Full automated test suite (`pytest -v`), including deployment-contract tests.
 
 2. **Docker Image Build & Publish**:
    - Uses Docker Buildx with GitHub Container Registry (`ghcr.io`).
@@ -39,21 +39,22 @@ This repository includes an automated continuous integration (CI) pipeline imple
      - `ghcr.io/<owner>/<repo>:<commit_sha>` (immutable commit SHA tag)
      - `ghcr.io/<owner>/<repo>:pr-<pr_number>-<short_sha>` (revision-pinned tag)
 
-3. **Preview Deployment Contract (Member 3 Interface)**:
-   - Invokes `scripts/deploy-preview.sh` with standardized environment variables:
-     - `PR_NUMBER`: Pull request number.
-     - `IMAGE_REF`: Target published container image reference.
-     - `CONTAINER_PORT`: Application port (`8080`).
-     - `RESOURCE_NAME`: Deterministic preview resource name (`preview-pr-${PR_NUMBER}`).
-     - `AZURE_CREDENTIALS`: Scoped Azure Service Principal credentials (configured by Member 3).
-     - `AZURE_RESOURCE_GROUP`: Azure Resource Group (`cdd-preview-rg`).
-   - Exports `status`, `url`, and `error_message` to GitHub Actions step outputs.
-   - Fallback behavior: If `AZURE_CREDENTIALS` is not set, the pipeline marks preview status as `pending_cloud_setup`, publishes the image, and exits cleanly without failing the build.
+3. **Real PR Preview Hosting (Member 3 — Pratham)**:
+   - Invokes `scripts/deploy-preview.sh` after Member 2 publishes the revision-tagged GHCR image.
+   - Required inputs: `PR_NUMBER`, registry-qualified `IMAGE_REF`, `AZURE_CREDENTIALS` JSON (`clientId`, `clientSecret`, `tenantId`, `subscriptionId`), and stable repository variable `PREVIEW_DNS_PREFIX`. The GHCR package used here is public, so ACI pulls anonymously and no registry secrets are required; set `REGISTRY_USERNAME` / `REGISTRY_PASSWORD` only if the package is made private.
+   - Preserves the optional `AZURE_RESOURCE_GROUP` secret (default `cdd-preview-rg`) and `CONTAINER_PORT` (default `8080`). `RESOURCE_NAME`, if provided, must equal `preview-pr-${PR_NUMBER}`.
+   - Creates or updates only the PR's tagged ACI container group in a dedicated nonproduction resource group. Uses Linux, 1 vCPU/1 GiB, public TCP, `Always` restart, and the application `PORT` setting. Reads the group's region from Azure; protected DNS reuse and a stable prefix keep same-PR update addressing consistent.
+   - Emits `status=success` and a URL only after verifying Azure provisioning, the requested image, the actual Azure FQDN, and HTTP GET `/` readiness. The URL is public HTTP, not HTTPS; use no sensitive data or application secrets.
+   - Missing secrets or any deployment/readiness failure produce a nonzero exit, `status=failure`, an empty `url`, and a fixed non-secret `error_message`. Image publication is not preview success; no placeholder URL or successful cloud-setup fallback exists.
 
 4. **PR Status & In-Place Commenting**:
    - Updates GitHub Commit Status Check (`PR Preview Deployment`) with target preview URL.
    - Automatically posts or updates a single markdown table comment on the PR using marker `<!-- cdd-pr-preview-status -->`.
    - Subsequent pushes update the existing comment in-place, eliminating duplicate notification noise.
+   - Aggregate reporting and final failure enforcement run even if deployment fails; failed previews have no success URL.
+   - Same-PR workflows serialize under `cdd-preview-pr-<number>` with `cancel-in-progress: false`; different PRs can deploy independently.
+
+Only run this secret-bearing workflow for controlled, trusted PR code. Do not expose secrets to untrusted PRs or use production resources. Running previews incur ACI charges. **PR-close cleanup is Member 4's responsibility and is not implemented here**; manually remove verified demo resources until that integration exists.
 
 ### Secrets and Permissions Configuration
-For setup instructions on repository secrets (`AZURE_CREDENTIALS`, `AZURE_RESOURCE_GROUP`) and GitHub token permissions, see [docs/CI_SECRETS_SETUP.md](docs/CI_SECRETS_SETUP.md).
+See [Member 3 hosting setup and Member 4 handoff](docs/CI_SECRETS_SETUP.md) for administrator provisioning, least-privilege Azure permissions, durable private GHCR authentication, the complete script contract, local deployment, safe diagnostics/cleanup, and the two-PR live validation procedure. No cloud credentials/subscription or repository deployment secrets are available here; live Azure provisioning and concurrent verification have not been performed.
