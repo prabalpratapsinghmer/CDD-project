@@ -252,6 +252,12 @@ def test_public_image_deploys_without_registry_credentials(deployment):
         group['containers'][0]['image']
         == 'ghcr.io/example/public:revision-one'
     )
+    env_vars = {
+        item['name']: item['value']
+        for item in group['containers'][0]['environmentVariables']
+    }
+    assert env_vars['PORT'] == str(deployment.port)
+    assert 'gthread' in env_vars['GUNICORN_CMD_ARGS']
 
 
 @pytest.mark.parametrize('overrides, reason', [

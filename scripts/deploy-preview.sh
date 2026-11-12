@@ -129,7 +129,13 @@ definition = {
             "properties": {
                 "image": image,
                 "ports": [{"port": port, "protocol": "TCP"}],
-                "environmentVariables": [{"name": "PORT", "value": str(port)}],
+                "environmentVariables": [
+                    {"name": "PORT", "value": str(port)},
+                    {
+                        "name": "GUNICORN_CMD_ARGS",
+                        "value": "--workers 2 --threads 8 --worker-class gthread --timeout 30 --keep-alive 5",
+                    },
+                ],
                 "resources": {"requests": {"cpu": 1, "memoryInGB": 1}},
             },
         }],
