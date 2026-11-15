@@ -62,7 +62,7 @@ Assign these roles to the five teammates. Replace the labels with names. Agree o
 
 **Deliverables:** PR workflow, image publishing, visible status/URL integration, and secret setup notes. Member 3 owns the deployment action/interface; agree on inputs and outputs before wiring them together.
 
-### Member 3 — Preview hosting and URL
+### Member 3 — Pratham
 
 **Owns:** Isolated temporary environments and how reviewers reach them.
 
