@@ -21,6 +21,10 @@ async function scenario(options, run) {
     summary, setOutput: (key, value) => { calls.outputs[key] = value; },
     error() {}, setFailed: message => calls.failures.push(message),
   };
+  const requestError = () => Object.assign(new Error('private API error'), {
+    status: options.requestStatus ?? 403,
+    response: { data: 'private response', headers: { authorization: 'private token' } },
+  });
   const github = { rest: {
     pulls: { get: async () => {
       calls.reads += 1;
@@ -32,14 +36,18 @@ async function scenario(options, run) {
     } },
     repos: { createCommitStatus: async value => {
       calls.statuses.push(value);
-      if (options.statusFails) throw new Error('private API error');
+      if (options.statusFails) throw requestError();
     } },
     issues: {
       listComments() {},
-      createComment: async value => { calls.created.push(value); if (options.commentFails) throw new Error('private API error'); },
-      updateComment: async value => { calls.updated.push(value); if (options.commentFails) throw new Error('private API error'); },
+      createComment: async value => { calls.created.push(value); if (options.commentFails) throw requestError(); },
+      updateComment: async value => { calls.updated.push(value); if (options.commentFails) throw requestError(); },
     },
-  }, paginate: async () => { calls.paginations += 1; return options.comments || []; } };
+  }, paginate: async () => {
+    calls.paginations += 1;
+    if (options.listFails) throw requestError();
+    return options.comments || [];
+  } };
   const context = { repo: { owner: 'owner', repo: 'repo' }, runId: 123, serverUrl: 'https://github.com' };
   try { await run({ github, context, core }); return calls; } finally {
     for (const [key, value] of Object.entries(saved)) {
@@ -128,4 +136,34 @@ test('reopened PR does not hide an invalid cleanup result', async () => {
   const calls = await scenario({ env: { POLICY_TRIGGER: 'close', CLEANUP_RESULT: 'unknown' } }, cleanup);
   assert.equal(calls.failures.length, 1);
   assert.equal(calls.created.length, 0);
+});
+for (const [stage, options, status] of [
+  ['list', { listFails: true }, 403],
+  ['create', { commentFails: true }, 422],
+  ['update', { commentFails: true, comments: [
+    { id: 2, user: { login: 'github-actions[bot]', type: 'Bot' }, body: '<!-- cdd-pr-preview-status -->' },
+  ] }, 500],
+]) {
+  test(`comment ${stage} failure exposes only safe stage and HTTP status`, async () => {
+    const calls = await scenario({ ...options, requestStatus: status }, preview);
+    assert.equal(calls.statuses.length, 1);
+    assert.match(calls.failures[0], new RegExp(`stage=${stage}, HTTP status=${status}`));
+    assert.doesNotMatch(calls.failures.join(' '), /private API error|private response|private token/);
+  });
+}
+test('status failure includes a safe channel-specific stage and numerical status', async () => {
+  const calls = await scenario({ statusFails: true, requestStatus: 403 }, preview);
+  assert.match(calls.failures[0], /stage=create-status, HTTP status=403/);
+  assert.equal(calls.created.length, 1);
+});
+test('non-numerical error status is not exposed', async () => {
+  const calls = await scenario({ commentFails: true, requestStatus: 'private status' }, preview);
+  assert.match(calls.failures[0], /stage=create, HTTP status=unavailable/);
+  assert.doesNotMatch(calls.failures[0], /private status/);
+});
+test('cleanup comment failure includes safe stage and numerical status', async () => {
+  const calls = await scenario({
+    state: 'closed', commentFails: true, requestStatus: 403, env: { POLICY_TRIGGER: 'close' },
+  }, cleanup);
+  assert.match(calls.failures[0], /cleanup-comment.*stage=create, HTTP status=403/);
 });

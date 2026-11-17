@@ -80,6 +80,7 @@ jobs:
       contents: read
       packages: write
       issues: write
+      pull-requests: write
       statuses: write
     # Serialization only: GitHub concurrency is not a durable ordered queue.
     concurrency:
@@ -318,6 +319,7 @@ jobs:
     permissions:
       contents: read
       issues: write
+      pull-requests: write
     concurrency:
       group: cdd-preview-pr-${{ needs.resolve.outputs.pr_number }}
       cancel-in-progress: false
