@@ -1,0 +1,62 @@
+{
+  "workflow_sha": "92eeadc7acf3ad152331eda3ea8999927d303cd5",
+  "application_sha": "72f9a97506354ab0f12feca857a53e8faceb6270",
+  "control_checkout_observed": true,
+  "application_checkout_observed": true,
+  "oci_labels": {
+    "org.opencontainers.image.revision": "72f9a97506354ab0f12feca857a53e8faceb6270",
+    "org.opencontainers.image.source": "https://github.com/prabalpratapsinghmer/CDD-project",
+    "org.opencontainers.image.title": "cdd-project-pr-9"
+  },
+  "public_api": {
+    "branch": "acceptance/disposable-b-20261117",
+    "build_time": "2026-11-17T16:45:12Z",
+    "commit_sha": "72f9a97506354ab0f12feca857a53e8faceb6270",
+    "hostname": "SandboxHost-639305307568880529",
+    "image_tag": "ghcr.io/prabalpratapsinghmer/cdd-project:pr-9-72f9a97",
+    "pr_number": "9",
+    "repo_url": "https://github.com/prabalpratapsinghmer/CDD-project",
+    "run_url": "https://github.com/prabalpratapsinghmer/CDD-project/actions/runs/44129113807",
+    "started_at": "2026-11-17T16:46:17.972028+00:00",
+    "uptime_seconds": 394
+  },
+  "deployment": {
+    "operation": "deploy",
+    "records": [
+      {
+        "pr_number": "9",
+        "resource_name": "preview-pr-9",
+        "present": true,
+        "image": "ghcr.io/prabalpratapsinghmer/cdd-project:pr-9-72f9a97",
+        "tags": {
+          "managed-by": "cdd-preview",
+          "pr-number": "9",
+          "preview-owner": "pratham-cdd-preview"
+        },
+        "provisioning_state": "Succeeded",
+        "fqdn": "pratham-cdd-preview-preview-pr-9.d8gefzhjbnffg4h7.koreacentral.azurecontainer.io",
+        "ip": "20.249.49.168",
+        "http": {
+          "success": true,
+          "method": "ip-resolve",
+          "status_code": 200
+        },
+        "deletion_requested": null,
+        "verified_absent": null,
+        "status": "success",
+        "result": null,
+        "error": ""
+      }
+    ],
+    "quota": null,
+    "status": "success",
+    "error": ""
+  },
+  "commit_status": {
+    "state": "success",
+    "context": "PR Preview Deployment",
+    "target_url": "http://pratham-cdd-preview-preview-pr-9.d8gefzhjbnffg4h7.koreacentral.azurecontainer.io:8080",
+    "created_at": "2026-11-17T16:51:52Z"
+  },
+  "run_url": "https://github.com/prabalpratapsinghmer/CDD-project/actions/runs/44130263626"
+}
