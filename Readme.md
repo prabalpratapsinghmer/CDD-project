@@ -13,6 +13,12 @@ docker run -p 8080:8080 cdd-demo-app
 ```
 Access the application at `http://localhost:8080`.
 
+### What the page shows
+The page describes its own build: PR number, commit, branch, CI run, image tag, container hostname and uptime. `ci.yml` passes these into the image as Docker build args (`PR_NUMBER`, `COMMIT_SHA`, `BRANCH`, `BUILD_TIME`, `RUN_URL`, `REPO_URL`, `IMAGE_TAG`), the Dockerfile turns them into environment variables, and `app.py` renders them. The accent colour comes from the PR number (consecutive PRs get clearly different colours) and the bar fingerprint from the commit hash. `/api/info` returns the same data as JSON. A plain local build has no metadata and shows "Local build"; to simulate a PR:
+```bash
+docker build -t cdd-demo-app --build-arg PR_NUMBER=7 --build-arg COMMIT_SHA=$(git rev-parse HEAD) --build-arg BRANCH=demo .
+```
+
 ---
 
 ## CI Pipeline & PR Status Automation (Member 2)

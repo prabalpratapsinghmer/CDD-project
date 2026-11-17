@@ -58,6 +58,7 @@ jobs:
           echo "primary_image_tag=${TAG_PR_SHA}" >> "$GITHUB_OUTPUT"
           echo "tag_pr=${TAG_PR}" >> "$GITHUB_OUTPUT"
           echo "tag_sha=${TAG_SHA}" >> "$GITHUB_OUTPUT"
+          echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -104,6 +105,15 @@ jobs:
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ steps.vars.outputs.commit_sha }}
             org.opencontainers.image.title=cdd-project-pr-${{ steps.vars.outputs.pr_number }}
+          # Shown on the preview page itself (see Dockerfile ARGs and app.py).
+          build-args: |
+            PR_NUMBER=${{ steps.vars.outputs.pr_number }}
+            COMMIT_SHA=${{ steps.vars.outputs.commit_sha }}
+            BRANCH=${{ github.event.pull_request.head.ref || github.ref_name }}
+            BUILD_TIME=${{ steps.vars.outputs.build_time }}
+            RUN_URL=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            REPO_URL=${{ github.server_url }}/${{ github.repository }}
+            IMAGE_TAG=${{ steps.vars.outputs.primary_image_tag }}
 
   deploy-preview-and-status:
     name: Deploy Preview and Report Status
