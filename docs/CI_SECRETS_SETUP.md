@@ -6,7 +6,7 @@ Member 2 publishes revision-tagged images to GHCR; `scripts/deploy-preview.sh` c
 
 - Use a **dedicated nonproduction subscription/resource group**, never a production group, credentials, data, or application secrets. This public demo exposes unauthenticated **HTTP**, not HTTPS; do not send sensitive data or treat it as a production service.
 - Run only controlled, trusted PRs. The existing workflow checks out PR code, installs its dependencies, runs tests, builds its Dockerfile, and executes its deployment script with secrets. Anyone able to change that code can steal credentials. Do not enable untrusted/fork PR secret access, switch to `pull_request_target` to bypass restrictions, or automatically approve untrusted runs. Fork PRs without secrets cannot deploy and must not be reported as successful previews.
-- Every active PR uses a Linux container group with **1 vCPU and 1 GiB memory**, public TCP, and restart policy `Always`. ACI charges for allocated resources while running; check regional capacity, subscription quotas, budget alerts, and current [ACI pricing](https://azure.microsoft.com/en-us/pricing/details/container-instances/). Two concurrent previews need at least 2 vCPU/2 GiB available. This work does not implement automatic expiry or close cleanup; remove recorded demo resources manually until Member 4 delivers cleanup.
+- Every active PR uses a Linux container group with **1 vCPU and 1 GiB memory**, public TCP, and restart policy `Always`. ACI charges for allocated resources while running; check regional capacity, subscription quotas, budget alerts, and current [ACI pricing](https://azure.microsoft.com/en-us/pricing/details/container-instances/). Two concurrent previews need at least 2 vCPU/2 GiB available. There is no automatic expiry: a preview is removed by the PR-close cleanup (section 5) or manually.
 - Keep registry tokens read-only and Azure rights resource-group scoped. Never enable broad repository write defaults or PR-review approval permissions merely to deploy: the workflow declares the GitHub token permissions it needs.
 
 ## 1. Administrator provisioning
@@ -184,19 +184,22 @@ az container logs --resource-group "$RESOURCE_GROUP" --name "preview-pr-${PR_NUM
 
 Application/event logs themselves can contain sensitive data: inspect privately and redact before sharing. Keep raw deploy stderr suppressed in CI rather than attempting unreliable secret redaction.
 
-## 5. Member 4 cleanup handoff and live validation
+## 5. Member 4 cleanup and recovery
 
-**Close cleanup is not implemented by Member 3.** Member 4 must use the same subscription, dedicated group, `preview-pr-N` name, and all three ownership tags. Never delete by broad prefix, delete the resource group, or target production. Missing groups should be handled idempotently; ownership/permission failures must remain visible.
+`.github/workflows/pr-cleanup.yml` runs on every `pull_request: closed` (merged or not) and calls `scripts/cleanup-preview.sh`. It checks the script out from the **base branch**, never from PR code, because the job holds Azure credentials. Inputs are the same as deploy: `PR_NUMBER`, `AZURE_CREDENTIALS`, `AZURE_RESOURCE_GROUP` (default `cdd-preview-rg`) and the repository variable `PREVIEW_DNS_PREFIX`, which must equal the group's `preview-owner` tag.
 
-The current workflow serializes same-PR runs with workflow-level concurrency:
+| Situation | Outcome (`GITHUB_OUTPUT`: `status`, `result`, `error_message`) |
+| --- | --- |
+| `preview-pr-N` exists with all three ownership tags | Deleted, then re-listed to prove it is gone: `status=success`, `result=deleted`. |
+| No `preview-pr-N` (build failed, repeated close event) | `status=success`, `result=not-found`; no delete is attempted. |
+| Group exists but any ownership tag differs | Refused, nothing deleted, `status=failure`. |
+| Missing/invalid credentials, login or permission error, delete that does not stick | `status=failure` and the job goes red. Nothing is reported as cleaned unless it verifiably is. |
 
-```yaml
-concurrency:
-  group: cdd-preview-pr-${{ github.event.pull_request.number || inputs.pr_number || '1' }}
-  cancel-in-progress: false
-```
+The script only runs `az container list` and `az container delete --name preview-pr-N` in the preview resource group. It never deletes by prefix and never deletes the resource group. Every run creates or updates one PR comment (marker `<!-- cdd-pr-cleanup-status -->`) with the result, including a failure message and a pointer to this section.
 
-Member 4's future close workflow must use **exactly the same group expression**, not a workflow-name-prefixed key, and `cancel-in-progress: false` so cleanup cannot race an active update. GitHub concurrency is not FIFO and keeps at most one pending run, so Member 4 must also guard against stale deployment after PR closure; shared serialization alone is not a closed-PR lifecycle implementation. Different PRs remain independent.
+**Ordering.** `pr-cleanup.yml` uses the same concurrency group value as `ci.yml` (`cdd-preview-pr-<N>`, `cancel-in-progress: false`), so a running deploy finishes before cleanup starts. GitHub keeps one pending run per group and replaces an older pending run with a newer one, so the latest event for a PR (update or close) wins and a closed PR cannot be redeployed by an older queued run. One residual case: manually dispatching `ci.yml` with the number of an already-closed PR recreates a preview that no close event will remove; delete it with the manual procedure below.
+
+**Previews that predate this workflow** (for example `preview-pr-3`, whose PR closed before cleanup existed) are never cleaned automatically. Delete them with the manual procedure below.
 
 ### Observed live validation (2026-11-11)
 
@@ -209,10 +212,11 @@ Environment: Azure for Students. The subscription's region policy allowed only `
 | Update isolation | PR #4 was updated from `pr-4-7a84fdb` to `pr-4-8ff6cdb`. Its FQDN stayed the same and its content changed. PR #3's URL and content stayed unchanged. |
 | Cleanup | Temporary PR #4 was closed; its ownership tags were verified; only `preview-pr-4` was deleted. `preview-pr-3` remained and served its content. This was manual because close automation is Member 4's deliverable. |
 | Failure reporting | Missing/empty credentials and readiness failures produced a nonzero exit, `status=failure`, empty URL, and a fixed diagnostic. An initial cold-start readiness timeout left a running group; the next run recovered it. |
+| Automated cleanup script (2026-11-17) | `scripts/cleanup-preview.sh` ran unmodified against real Azure in `cdd-preview-rg-koreacentral` with throwaway groups `preview-pr-9990` (correct tags) and `preview-pr-9991` (foreign `preview-owner`). Closing 9990: `result=deleted`, issued only `container list`/`container delete --name preview-pr-9990`/`container list`. Repeating 9990 and closing never-deployed 9992: `result=not-found`, no delete issued. 9991: refused (`status=failure`), still present. Nonexistent resource group: `status=failure`. `preview-pr-3` was untouched throughout; throwaway groups were removed afterwards. Limits: service-principal login and the GitHub workflow trigger were not exercised (a pass-through `az` shim skipped only `login` and `account set`; the workflow was validated with actionlint and the PR-comment script against a mocked API). |
 
 A **first** ACI creation in `koreacentral` took more than 15 minutes before the FQDN was reliably reachable; warm updates took about 2.5–3 minutes. Readiness now connects to the ACI IP with the FQDN Host header and retries up to 60 times. Pre-warm a preview before a demo. Runner DNS/public-network reachability was intermittent; the IP probe removes DNS from the readiness path. Azure CLI calls now have timeouts and the deploy job has a 30-minute cap.
 
-Public HTTP demo only; do not send sensitive data. ACI groups bill while running. PR #3's preview remains until the PR is closed and Member 4 cleanup exists; remove it manually when it is no longer needed.
+Public HTTP demo only; do not send sensitive data. ACI groups bill while running. A preview whose PR closed before the cleanup workflow existed (such as `preview-pr-3`) keeps running until you delete it manually.
 
 ### Repeat procedure for future live validation
 

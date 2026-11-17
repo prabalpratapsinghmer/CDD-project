@@ -13,6 +13,12 @@ docker run -p 8080:8080 cdd-demo-app
 ```
 Access the application at `http://localhost:8080`.
 
+### What the page shows
+The page describes its own build: PR number, commit, branch, CI run, image tag, container hostname and uptime. `ci.yml` passes these into the image as Docker build args (`PR_NUMBER`, `COMMIT_SHA`, `BRANCH`, `BUILD_TIME`, `RUN_URL`, `REPO_URL`, `IMAGE_TAG`), the Dockerfile turns them into environment variables, and `app.py` renders them. The accent colour comes from the PR number (consecutive PRs get clearly different colours) and the bar fingerprint from the commit hash. `/api/info` returns the same data as JSON. A plain local build has no metadata and shows "Local build"; to simulate a PR:
+```bash
+docker build -t cdd-demo-app --build-arg PR_NUMBER=7 --build-arg COMMIT_SHA=$(git rev-parse HEAD) --build-arg BRANCH=demo .
+```
+
 ---
 
 ## CI Pipeline & PR Status Automation (Member 2)
@@ -54,7 +60,13 @@ This repository includes an automated continuous integration (CI) pipeline imple
    - Aggregate reporting and final failure enforcement run even if deployment fails; failed previews have no success URL.
    - Same-PR workflows serialize under `cdd-preview-pr-<number>` with `cancel-in-progress: false`; different PRs can deploy independently.
 
-Only run this secret-bearing workflow for controlled, trusted PR code. Do not expose secrets to untrusted PRs or use production resources. Running previews incur ACI charges. **PR-close cleanup is Member 4's responsibility and is not implemented here**; manually remove verified demo resources until that integration exists.
+5. **PR-Close Cleanup (Member 4)**:
+   - `.github/workflows/pr-cleanup.yml` runs on every closed PR (merged or not) and calls `scripts/cleanup-preview.sh` from the base branch.
+   - Deletes only `preview-pr-<pr_number>`, and only if all three ownership tags match; a missing group is a successful no-op, so repeated close events are safe. It verifies the group is gone afterwards.
+   - Credential, permission, ownership and failed-delete problems fail the job and are reported in a single in-place PR comment (`<!-- cdd-pr-cleanup-status -->`); nothing is reported as cleaned unless it was.
+   - Shares the `cdd-preview-pr-<number>` concurrency group with `ci.yml`, so cleanup waits for an in-flight deploy of the same PR.
+
+Only run this secret-bearing workflow for controlled, trusted PR code. Do not expose secrets to untrusted PRs or use production resources. Running previews incur ACI charges. Previews whose PR closed before the cleanup workflow existed are not cleaned automatically; remove them manually (see docs).
 
 ### Secrets and Permissions Configuration
 See [Member 3 hosting setup and Member 4 handoff](docs/CI_SECRETS_SETUP.md) for administrator provisioning, least-privilege Azure permissions, durable private GHCR authentication, the complete script contract, local deployment, safe diagnostics/cleanup, and the two-PR live validation procedure. No cloud credentials/subscription or repository deployment secrets are available here; live Azure provisioning and concurrent verification have not been performed.

@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% if from_ci %}PR #{{ info.pr_number }} · {% endif %}CDD Project — PR Preview Environment</title>
+<style>
+  :root {
+    --h: {{ hue }};
+    --a1: hsl(var(--h) 90% 64%);
+    --a2: hsl(calc(var(--h) + 55) 90% 64%);
+    --bg: #090b12;
+    --card: rgba(255, 255, 255, .045);
+    --line: rgba(255, 255, 255, .11);
+    --text: #eceef6;
+    --muted: #a0a9bf;
+    --ok: #3ddc97;
+    --warn: #ffc857;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; min-height: 100vh; color: var(--text); background: var(--bg);
+    font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
+    overflow-x: hidden;
+  }
+  /* Aurora tinted by this commit's hue, plus a faint grid. */
+  body::before {
+    content: ""; position: fixed; inset: -20%; z-index: -2;
+    background:
+      radial-gradient(45vw 40vh at 15% 12%, hsl(var(--h) 90% 55% / .30), transparent 65%),
+      radial-gradient(40vw 40vh at 85% 8%, hsl(calc(var(--h) + 55) 90% 55% / .24), transparent 65%),
+      radial-gradient(50vw 45vh at 60% 95%, hsl(calc(var(--h) + 120) 80% 50% / .16), transparent 65%);
+    animation: drift 22s ease-in-out infinite alternate;
+  }
+  body::after {
+    content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 56px 56px; opacity: .25;
+    mask-image: radial-gradient(ellipse at 50% 0%, #000 0%, transparent 70%);
+  }
+  a { color: inherit; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+  header.top { display: flex; align-items: center; justify-content: space-between; padding: 22px 0; gap: 12px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 12px; font-weight: 700; letter-spacing: .02em; }
+  .logo {
+    width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+    background: linear-gradient(135deg, var(--a1), var(--a2)); color: #0a0c14; font: 800 13px var(--mono);
+  }
+  .pill {
+    display: inline-flex; align-items: center; gap: 9px; padding: 7px 14px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--card); font: 600 12px var(--mono); letter-spacing: .08em;
+    text-transform: uppercase; backdrop-filter: blur(8px);
+  }
+  .live { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 0 var(--ok); animation: ping 2s infinite; }
+  .pill.local .live { background: var(--warn); box-shadow: none; animation: none; }
+
+  .hero { padding: 56px 0 40px; }
+  .eyebrow { color: var(--muted); font: 600 13px var(--mono); letter-spacing: .14em; text-transform: uppercase; }
+  h1 { margin: 14px 0 18px; font-size: clamp(2.5rem, 7vw, 4.9rem); line-height: 1.04; letter-spacing: -.03em; }
+  .grad { background: linear-gradient(95deg, var(--a1), var(--a2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lead { max-width: 640px; color: var(--muted); font-size: 1.15rem; margin: 0 0 28px; }
+  .lead code, dd code { font-family: var(--mono); color: var(--text); }
+  .cta { display: flex; gap: 12px; flex-wrap: wrap; }
+  .btn {
+    padding: 11px 20px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 15px;
+    border: 1px solid var(--line); background: var(--card); transition: transform .15s, border-color .15s;
+  }
+  .btn:hover { transform: translateY(-2px); border-color: var(--a1); }
+  .btn.primary { background: linear-gradient(135deg, var(--a1), var(--a2)); color: #0a0c14; border-color: transparent; }
+
+  section { padding: 34px 0; }
+  h2 { font-size: 1.5rem; margin: 0 0 6px; letter-spacing: -.01em; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+
+  .pipe { list-style: none; display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; padding: 0; margin: 0; }
+  .step {
+    position: relative; padding: 18px 16px; border-radius: 16px; border: 1px solid var(--line);
+    background: var(--card); backdrop-filter: blur(8px);
+    opacity: 0; transform: translateY(14px); animation: rise .6s ease forwards; animation-delay: calc(var(--i) * 110ms);
+  }
+  .step:not(:last-child)::after { content: ""; position: absolute; top: 33px; right: -17px; width: 18px; height: 2px; background: var(--line); }
+  .step.done:not(:last-child)::after { background: var(--ok); }
+  .n { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; margin-bottom: 12px; font: 700 13px var(--mono); border: 1px solid var(--line); }
+  .step.done .n { background: var(--ok); color: #06231a; border-color: transparent; }
+  .step.now { border-color: var(--a1); box-shadow: 0 16px 48px -16px hsl(var(--h) 90% 55% / .7); }
+  .step.now .n { background: linear-gradient(135deg, var(--a1), var(--a2)); color: #0a0c14; border-color: transparent; animation: glow 2s ease-in-out infinite; }
+  .step.later { border-style: dashed; }
+  .step.later, .step.skip { color: var(--muted); }
+  .step h3 { margin: 0 0 6px; font-size: 15px; color: var(--text); }
+  .step p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--muted); }
+  .tag { display: inline-block; margin-top: 10px; font: 700 10px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--a1); }
+
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; margin: 0; }
+  .fact { padding: 16px 18px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); backdrop-filter: blur(8px); min-width: 0; }
+  dt { color: var(--muted); font: 600 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; margin-bottom: 6px; }
+  dd { margin: 0; font: 500 14px var(--mono); overflow-wrap: anywhere; }
+  dd a { text-decoration-color: var(--a1); text-underline-offset: 3px; }
+  dd .big { font-size: 20px; font-weight: 700; }
+  .none { color: var(--muted); }
+
+  .print { display: grid; grid-template-columns: 1.1fr 1fr; gap: 24px; align-items: center; padding: 24px; border-radius: 18px; border: 1px solid var(--line); background: var(--card); backdrop-filter: blur(8px); }
+  .bars { display: flex; align-items: flex-end; gap: 6px; height: 120px; }
+  .bars i { flex: 1; border-radius: 6px 6px 3px 3px; background: linear-gradient(180deg, hsl(var(--b) 90% 66%), hsl(var(--b) 80% 42%)); transform-origin: bottom; transform: scaleY(0); animation: grow .7s cubic-bezier(.2, .8, .2, 1) forwards; animation-delay: calc(var(--i) * 45ms + 300ms); }
+  .print p { margin: 0 0 10px; color: var(--muted); }
+  .print p strong { color: var(--text); }
+
+  .why { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .why div { padding: 18px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); }
+  .why b { display: block; margin-bottom: 4px; }
+  .why span { color: var(--muted); font-size: 14px; }
+
+  footer { padding: 36px 0 56px; color: var(--muted); font-size: 14px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-top: 1px solid var(--line); margin-top: 20px; }
+  footer a { text-decoration-color: var(--a1); text-underline-offset: 3px; }
+
+  @keyframes drift { from { transform: translate3d(-2%, -1%, 0) scale(1); } to { transform: translate3d(2%, 2%, 0) scale(1.08); } }
+  @keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(61, 220, 151, .6); } 70% { box-shadow: 0 0 0 10px rgba(61, 220, 151, 0); } 100% { box-shadow: 0 0 0 0 rgba(61, 220, 151, 0); } }
+  @keyframes glow { 50% { box-shadow: 0 0 22px 2px hsl(var(--h) 90% 60% / .65); } }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+  @keyframes grow { to { transform: scaleY(1); } }
+
+  @media (max-width: 1000px) { .pipe { grid-template-columns: repeat(2, 1fr); } .step::after { display: none; } .print { grid-template-columns: 1fr; } .why { grid-template-columns: 1fr; } }
+  @media (max-width: 560px) { .pipe { grid-template-columns: 1fr; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; }
+    .step { opacity: 1; transform: none; }
+    .bars i { transform: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><span class="logo">CDD</span> Continuous Delivery Demo</div>
+    {% if from_ci %}
+    <span class="pill"><span class="live"></span> Live preview · PR #{{ info.pr_number }}</span>
+    {% else %}
+    <span class="pill local"><span class="live"></span> Local build · not from CI</span>
+    {% endif %}
+  </header>
+
+  <main>
+    <div class="hero">
+      <div class="eyebrow">Every change gets its own live link</div>
+      {% if from_ci %}
+      <h1>This is <span class="grad">PR&nbsp;#{{ info.pr_number }}</span>,<br>running right now.</h1>
+      <p class="lead">
+        Built from commit <code>{{ info.commit_sha[:7] }}</code>{% if info.branch %} on <code>{{ info.branch }}</code>{% endif %},
+        tested by GitHub Actions and deployed into its own container. Production never saw it,
+        and it disappears when the pull request closes.
+      </p>
+      <div class="cta">
+        {% if info.repo_url %}<a class="btn primary" href="{{ info.repo_url }}/pull/{{ info.pr_number }}">View the pull request</a>{% endif %}
+        {% if info.run_url %}<a class="btn" href="{{ info.run_url }}">See the CI run</a>{% endif %}
+        {% if info.repo_url %}<a class="btn" href="{{ info.repo_url }}/commit/{{ info.commit_sha }}">Inspect the commit</a>{% endif %}
+      </div>
+      {% else %}
+      <h1>Running <span class="grad">locally</span>.</h1>
+      <p class="lead">
+        No pull request or commit was baked into this build. Deploy it through the pipeline and this page
+        will show exactly which PR, commit and CI run produced it.
+      </p>
+      {% endif %}
+    </div>
+
+    <section>
+      <h2>How this page got here</h2>
+      <p class="sub">Every step ran automatically after one push. Nobody deployed anything by hand.</p>
+      <ol class="pipe">
+        {% set cls = ['done', 'done', 'done', 'done', 'now', 'later'] if from_ci else ['skip', 'skip', 'skip', 'skip', 'now', 'skip'] %}
+        {% set steps = [
+          ('Pull request opened', 'A push to the branch triggers the workflow.'),
+          ('Tested and linted', 'pytest and flake8 must pass before anything is built.'),
+          ('Image built', 'Docker image tagged with the PR and commit, pushed to GHCR.'),
+          ('Deployed in isolation', 'Its own Azure container group, named after the PR number.'),
+          ('Live link', 'You are looking at it.' if from_ci else 'Local run, no CI involved.'),
+          ('Closed, then cleaned up', 'When the PR closes the container is deleted and verified gone.'),
+        ] %}
+        {% for title, text in steps %}
+        <li class="step {{ cls[loop.index0] }}" style="--i: {{ loop.index0 }}">
+          <div class="n">{% if cls[loop.index0] == 'done' %}&check;{% else %}{{ loop.index }}{% endif %}</div>
+          <h3>{{ title }}</h3>
+          <p>{{ text }}</p>
+          {% if cls[loop.index0] == 'now' %}<span class="tag">You are here</span>{% endif %}
+          {% if cls[loop.index0] == 'later' %}<span class="tag" style="color: var(--muted)">Happens on close</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ol>
+    </section>
+
+    <section>
+      <h2>The receipts</h2>
+      <p class="sub">Read from the running container, not typed into the page.</p>
+      <dl class="facts">
+        <div class="fact"><dt>Pull request</dt><dd>
+          {% if info.pr_number %}{% if info.repo_url %}<a class="big" href="{{ info.repo_url }}/pull/{{ info.pr_number }}">#{{ info.pr_number }}</a>{% else %}<span class="big">#{{ info.pr_number }}</span>{% endif %}{% else %}<span class="none">none (local run)</span>{% endif %}
+        </dd></div>
+        <div class="fact"><dt>Commit</dt><dd>
+          {% if info.commit_sha %}{% if info.repo_url %}<a href="{{ info.repo_url }}/commit/{{ info.commit_sha }}">{{ info.commit_sha }}</a>{% else %}{{ info.commit_sha }}{% endif %}{% else %}<span class="none">none (local run)</span>{% endif %}
+        </dd></div>
+        <div class="fact"><dt>Branch</dt><dd>{% if info.branch %}{{ info.branch }}{% else %}<span class="none">unknown</span>{% endif %}</dd></div>
+        <div class="fact"><dt>Built by CI at</dt><dd>{% if info.build_time %}{{ info.build_time }}{% else %}<span class="none">not built by CI</span>{% endif %}</dd></div>
+        <div class="fact"><dt>CI run</dt><dd>{% if info.run_url %}<a href="{{ info.run_url }}">{{ info.run_url.rsplit('/', 1)[-1] }} · open in Actions</a>{% else %}<span class="none">none</span>{% endif %}</dd></div>
+        <div class="fact"><dt>Docker image</dt><dd>{% if info.image_tag %}{{ info.image_tag }}{% else %}<span class="none">none</span>{% endif %}</dd></div>
+        <div class="fact"><dt>Container</dt><dd>{{ info.hostname }}</dd></div>
+        <div class="fact"><dt>Uptime</dt><dd><span class="big" id="uptime" data-seconds="{{ info.uptime_seconds }}">…</span></dd></div>
+      </dl>
+    </section>
+
+    <section>
+      <h2>Commit fingerprint</h2>
+      <p class="sub">Bars come from the commit hash, the accent colour from the PR number.</p>
+      <div class="print">
+        <div class="bars" aria-hidden="true">
+          {% for b in bars %}<i style="--b: {{ b }}; --i: {{ loop.index0 }}; height: {{ 25 + (b % 7) * 12 }}%"></i>{% endfor %}
+        </div>
+        <div>
+          <p><strong>New push, new bars. New PR, new colour.</strong></p>
+          <p>Open another PR's preview link beside this one: separate URL, separate container, separate fingerprint.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="why">
+        <div><b>One link per PR</b><span>Reviewers see the change running, not just a diff.</span></div>
+        <div><b>Production untouched</b><span>Previews live in their own throwaway resource group.</span></div>
+        <div><b>Nothing left behind</b><span>Closing the PR deletes the container, merged or not.</span></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Flask · Docker · GitHub Actions · Azure Container Instances</span>
+    <span><a href="/api/info">/api/info</a> returns this page's data as JSON</span>
+  </footer>
+</div>
+<script>
+  // Server-reported uptime, ticking locally so viewer clock skew cannot distort it.
+  (function () {
+    var el = document.getElementById('uptime');
+    var base = parseInt(el.dataset.seconds, 10), t0 = performance.now();
+    function two(n) { return String(n).padStart(2, '0'); }
+    function tick() {
+      var s = base + Math.floor((performance.now() - t0) / 1000);
+      var d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+      el.textContent = (d ? d + 'd ' : '') + two(h) + 'h ' + two(m) + 'm ' + two(s % 60) + 's';
+    }
+    tick(); setInterval(tick, 1000);
+  })();
+</script>
+</body>
+</html>
