@@ -33,6 +33,11 @@ def build_info():
 
 @app.route('/')
 def home():
+    if os.environ.get('GUNICORN_CMD_ARGS'):
+        return (
+            'Disposable acceptance B: deliberate ACI-only readiness fault.',
+            503,
+        )
     info = build_info()
     return render_template('dashboard.html', info=info)
 
