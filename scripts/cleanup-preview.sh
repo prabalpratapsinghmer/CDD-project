@@ -14,6 +14,9 @@ output_var() {
 
 fail() {
   printf 'ERROR: %s\n' "$1" >&2
+  if [[ -n "${evidence_path:-}" ]]; then
+    python3 "$evidence_helper" finish "$evidence_path" failure "$1" || true
+  fi
   output_var status failure
   output_var result ""
   output_var error_message "$1"
@@ -27,6 +30,8 @@ PR_NUMBER="${PR_NUMBER:-}"
 AZURE_RESOURCE_GROUP="${AZURE_RESOURCE_GROUP:-cdd-preview-rg}"
 PREVIEW_DNS_PREFIX="${PREVIEW_DNS_PREFIX:-}"
 
+evidence_helper="$(dirname "${BASH_SOURCE[0]}")/preview_evidence.py"
+evidence_path=$(python3 "$evidence_helper" init cleanup "${PR_NUMBER:-unknown}")
 [[ "$PR_NUMBER" =~ ^[1-9][0-9]{0,9}$ ]] || fail "PR_NUMBER must be a positive integer of at most 10 digits."
 RESOURCE_NAME="preview-pr-${PR_NUMBER}"
 [[ "$PREVIEW_DNS_PREFIX" =~ ^[a-z]([a-z0-9-]{0,28}[a-z0-9])?$ ]] || fail "PREVIEW_DNS_PREFIX must be a lowercase DNS prefix of 1 to 30 characters."
@@ -82,6 +87,7 @@ timeout 60 az container list --resource-group "$AZURE_RESOURCE_GROUP" \
   --query "[?name=='${RESOURCE_NAME}']" --output json >"$work_dir/existing.json" 2>"$work_dir/azure-error.log"
 
 failure_reason="Refusing to delete a container group without matching preview ownership tags."
+python3 "$evidence_helper" observe "$evidence_path" "$work_dir/existing.json" "$PREVIEW_DNS_PREFIX"
 state=$(python3 - "$work_dir/existing.json" "$PR_NUMBER" "$PREVIEW_DNS_PREFIX" <<'PY'
 import json
 import sys
@@ -103,15 +109,21 @@ result=not-found
 if [[ "$state" == owned ]]; then
   printf 'Deleting %s from preview resource group %s.\n' "$RESOURCE_NAME" "$AZURE_RESOURCE_GROUP"
   failure_reason="ACI delete failed; verify the scoped role may delete container groups."
+  python3 "$evidence_helper" set "$evidence_path" deletion_requested true
   timeout 300 az container delete --resource-group "$AZURE_RESOURCE_GROUP" --name "$RESOURCE_NAME" \
     --yes --output none >/dev/null 2>"$work_dir/azure-error.log"
   failure_reason="Preview still exists after delete; remove it manually (see docs/CI_SECRETS_SETUP.md)."
   remaining=$(timeout 60 az container list --resource-group "$AZURE_RESOURCE_GROUP" \
     --query "[?name=='${RESOURCE_NAME}'].name" --output tsv 2>"$work_dir/azure-error.log")
+  if [[ -n "$remaining" ]]; then
+    python3 "$evidence_helper" set "$evidence_path" verified_absent false
+  fi
   [[ -z "$remaining" ]] || fail "$failure_reason"
   result=deleted
 fi
 
+python3 "$evidence_helper" set "$evidence_path" verified_absent true result "\"${result}\""
+python3 "$evidence_helper" finish "$evidence_path" success ""
 output_var status success
 output_var result "$result"
 output_var error_message ""

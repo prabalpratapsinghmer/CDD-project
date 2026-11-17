@@ -155,6 +155,11 @@ def test_close_deletes_only_that_pr_and_repeat_is_safe(cleanup):
     assert outputs['status'] == 'success'
     assert outputs['result'] == 'not-found'
     assert cleanup.state()['calls'].count('container delete') == 1
+    evidence_path = Path(outputs['evidence_path'])
+    record = json.loads(evidence_path.read_text())['records'][0]
+    assert record['verified_absent'] is True
+    assert record['result'] == 'not-found'
+    evidence_path.unlink()
     assert set(cleanup.state()['containers']) == {'preview-pr-42'}
 
 
@@ -192,6 +197,14 @@ def test_azure_errors_fail_visibly_and_redacted(cleanup, command, reason):
 def test_delete_that_does_not_stick_is_a_failure(cleanup):
     result, outputs = cleanup.run(FAKE_AZ_STICKY='1')
     assert_failure(result, outputs, 'still exists')
+    evidence_path = Path(outputs['evidence_path'])
+    record = json.loads(evidence_path.read_text())['records'][0]
+    assert record['present'] is True
+    assert record['deletion_requested'] is True
+    assert record['verified_absent'] is False
+    assert record['status'] == 'failure'
+    assert record['result'] is None
+    evidence_path.unlink()
 
 
 @pytest.mark.parametrize('overrides, reason', [

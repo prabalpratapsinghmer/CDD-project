@@ -5,7 +5,7 @@ Member 2 publishes revision-tagged images to GHCR; `scripts/deploy-preview.sh` c
 ## Trust, isolation, and cost
 
 - Use a **dedicated nonproduction subscription/resource group**, never a production group, credentials, data, or application secrets. This public demo exposes unauthenticated **HTTP**, not HTTPS; do not send sensitive data or treat it as a production service.
-- Run only controlled, trusted PRs. The existing workflow checks out PR code, installs its dependencies, runs tests, builds its Dockerfile, and executes its deployment script with secrets. Anyone able to change that code can steal credentials. Do not enable untrusted/fork PR secret access, switch to `pull_request_target` to bypass restrictions, or automatically approve untrusted runs. Fork PRs without secrets cannot deploy and must not be reported as successful previews.
+- Run only controlled, trusted **same-repository** PRs targeting `main`. The candidate resolves the current PR head through the API and rejects forks before scheduling credentials. It checks out trusted orchestration/helpers into `control/` at `github.workflow_sha`, separately from `application/` at the resolved PR SHA. This prevents arbitrary PR-head deployment helpers from being selected; it does **not** sandbox application dependencies, tests or Dockerfiles running on a secret-bearing runner. Anyone able to change those inputs must be trusted. Never use `pull_request_target` or automatic approval to bypass fork restrictions.
 - Every active PR uses a Linux container group with **1 vCPU and 1 GiB memory**, public TCP, and restart policy `Always`. ACI charges for allocated resources while running; check regional capacity, subscription quotas, budget alerts, and current [ACI pricing](https://azure.microsoft.com/en-us/pricing/details/container-instances/). Two concurrent previews need at least 2 vCPU/2 GiB available. There is no automatic expiry: a preview is removed by the PR-close cleanup (section 5) or manually.
 - Keep registry tokens read-only and Azure rights resource-group scoped. Never enable broad repository write defaults or PR-review approval permissions merely to deploy: the workflow declares the GitHub token permissions it needs.
 
@@ -129,7 +129,46 @@ Resource name is always `preview-pr-N`. The DNS label is `${PREVIEW_DNS_PREFIX}-
 
 HTTP readiness uses the ACI public IP with the FQDN Host header (`curl --resolve`) and bounded retries (60 retries, 5-second retry delay, 5-second connection timeout, 10-second per-attempt limit) to cover ACI cold starts and flaky runner DNS. It does not prove application revision content; validate that separately below. The script uses an isolated temporary Azure CLI configuration and removes it on exit, leaving the workstation's active Azure login/subscription unchanged. Raw Azure stderr is suppressed rather than published because it may expose credentials.
 
-The workflow runs the full `pytest -v` suite and `flake8 app.py tests`, preserves Member 2's GHCR tags and status/comment integration, and runs aggregate reporting plus final failure enforcement even after deployment failure. Output values enter the aggregate shell through environment variables, not interpolated shell source.
+The preview job tests/builds from `application/`, uses only `control/` helpers, loads and HTTP-smokes the production image before pushing its three tags, and deploys the revision-pinned tag. State/head are re-fetched after acquiring the mutation lock and immediately before publication, deployment and shared PR reporting. Current build/deploy failures publish no success URL. Reporting paginates marker comments and updates only `github-actions[bot]` comments; contributor-authored markers are never edited. Both commit status and deployment comment publication are attempted, and either channel's failure fails reporting visibly. Cleanup comment publication failures likewise fail the job.
+
+### Candidate dispatch without merging main
+
+The registered **CI** workflow accepts required `pr_number` (positive integer, at most 10 digits), `operation=preview|verify|cleanup` (default `preview`), optional `peer_pr_number` (required and distinct for `verify`), `expectation=inventory|both-present|a-present-b-absent|both-absent` (default `both-present`), and `cleanup_mode=reconcile|manual-cleanup` (default `reconcile`). PR events always select preview. Manual preview and cleanup require repository write/admin permission. All target PRs must exist in this repository with base `main` and same-repository heads.
+
+Select the reviewed candidate branch explicitly. These commands use the integration branch, not `main`; replace `A`/`B` with actual distinct PR numbers before use. The candidate control SHA can differ from either PR's head: application/image metadata always follows the API-resolved target PR head, not the workflow ref.
+
+```bash
+REPOSITORY=prabalpratapsinghmer/CDD-project
+CANDIDATE=completion/cdd-acceptance-20261117T161744Z
+A=123  # replace with actual trusted PR
+B=124  # replace with actual trusted peer PR
+
+gh workflow run ci.yml --repo "$REPOSITORY" --ref "$CANDIDATE" \
+  -f operation=preview -f pr_number="$A"
+gh workflow run ci.yml --repo "$REPOSITORY" --ref "$CANDIDATE" \
+  -f operation=verify -f pr_number="$A" -f peer_pr_number="$B" \
+  -f expectation=both-present
+gh workflow run ci.yml --repo "$REPOSITORY" --ref "$CANDIDATE" \
+  -f operation=cleanup -f pr_number="$B" -f cleanup_mode=reconcile
+# Explicit cost-control deletion, even if A is open:
+gh workflow run ci.yml --repo "$REPOSITORY" --ref "$CANDIDATE" \
+  -f operation=cleanup -f pr_number="$A" -f cleanup_mode=manual-cleanup
+gh workflow run ci.yml --repo "$REPOSITORY" --ref "$CANDIDATE" \
+  -f operation=verify -f pr_number="$A" -f peer_pr_number="$B" \
+  -f expectation=both-absent
+```
+
+For historical inventory only, use `operation=verify`, `pr_number=6`, `peer_pr_number=4`, `expectation=inventory`; this observes presence without changing resources or assuming old previews still exist. For isolation after B cleanup use `expectation=a-present-b-absent`.
+
+No main merge is authorized for candidate acceptance. Main's installed automatic workflows remain unchanged until review/merge; exercise candidate control through this explicit dispatch entry point. A close event processed by installed main is evidence for that installed implementation, not proof the candidate close workflow is installed.
+
+### Read-only public verifier and sanitized evidence
+
+`scripts/verify-previews.py` receives `PR_A`, `PR_B`, `EXPECTED_IMAGE_A`, `EXPECTED_IMAGE_B`, `EXPECTATION`, `AZURE_CREDENTIALS`, `AZURE_RESOURCE_GROUP`, and `PREVIEW_DNS_PREFIX`. The workflow derives expected revision-tagged images from both API-resolved current PR heads; do not substitute floating tags. Verification has only `contents: read` GitHub token permission, no mutation concurrency group, and does not build, publish, deploy, delete, comment or set commit status.
+
+It targets only exact `preview-pr-N` resources, checks all three ownership tags before exposing image/network details, and probes actual public HTTP URLs **without `--resolve`**. `both-present` requires both current images, successful provisioning and reachable public HTTP; `a-present-b-absent` requires A healthy/current and B absent; `both-absent` requires both absent. `inventory` records observed presence without requiring one of these arrangements. Ownership, image, provisioning, authentication, malformed response or reachability mismatches fail verification. Quota-read permission limits are separate observations; two successful concurrent provisions are the capacity proof.
+
+Cloud helpers publish `evidence_path` before cloud operations, pointing outside disposable CLI directories to `${RUNNER_TEMP:-/tmp}/cdd-preview-<operation>-<PR_NUMBER>-<unique>.json`. Records allowlist observed PR/resource/image/tags/provisioning/FQDN/IP, readiness HTTP result, final status/error and verified post-delete absence; unobserved fields remain null. A readiness failure retains already observed cloud state and actual HTTP failure, but success `url` remains empty. Cleanup failures retain observed targeting/deletion state without claiming absence. CLI temporary credentials/configuration are removed on exit; sanitized evidence persists for `if: always()` artifact and summary publication using only the declared path. Never upload raw Azure responses, credential files, environment dumps or raw login/errors.
 
 ### Local invocation
 
@@ -186,22 +225,22 @@ Application/event logs themselves can contain sensitive data: inspect privately 
 
 ## 5. Member 4 cleanup and recovery
 
-`.github/workflows/pr-cleanup.yml` runs on every `pull_request: closed` (merged or not) and calls `scripts/cleanup-preview.sh`. It checks the script out from the **base branch**, never from PR code, because the job holds Azure credentials. Inputs are the same as deploy: `PR_NUMBER`, `AZURE_CREDENTIALS`, `AZURE_RESOURCE_GROUP` (default `cdd-preview-rg`) and the repository variable `PREVIEW_DNS_PREFIX`, which must equal the group's `preview-owner` tag.
+`.github/workflows/pr-cleanup.yml` handles `pull_request: closed` (merged or not) with trusted base-main code, never PR-head scripts. It rechecks state inside the shared mutation lock and skips a reopened PR. Candidate CI `operation=cleanup` instead selects helpers at the reviewed dispatch workflow SHA after write/admin actor validation: `reconcile` cleans only a currently closed PR; `manual-cleanup` deliberately permits deletion of an open PR's owned preview. Inputs are `PR_NUMBER`, `AZURE_CREDENTIALS`, `AZURE_RESOURCE_GROUP` (default `cdd-preview-rg`) and `PREVIEW_DNS_PREFIX`, which must match `preview-owner`.
 
 | Situation | Outcome (`GITHUB_OUTPUT`: `status`, `result`, `error_message`) |
 | --- | --- |
 | `preview-pr-N` exists with all three ownership tags | Deleted, then re-listed to prove it is gone: `status=success`, `result=deleted`. |
 | No `preview-pr-N` (build failed, repeated close event) | `status=success`, `result=not-found`; no delete is attempted. |
-| Group exists but any ownership tag differs | Refused, nothing deleted, `status=failure`. |
-| Missing/invalid credentials, login or permission error, delete that does not stick | `status=failure` and the job goes red. Nothing is reported as cleaned unless it verifiably is. |
+| Group exists but any ownership tag differs | Refused, nothing deleted, `status=failure`, empty `result`. |
+| Missing/invalid credentials, login or permission error, delete that does not stick | `status=failure`, empty `result`; the job goes red. Nothing is reported as cleaned unless it verifiably is. |
 
-The script only runs `az container list` and `az container delete --name preview-pr-N` in the preview resource group. It never deletes by prefix and never deletes the resource group. Every run creates or updates one PR comment (marker `<!-- cdd-pr-cleanup-status -->`) with the result, including a failure message and a pointer to this section.
+The cleanup script uses exact-name `az container list` lookup and `az container delete --name preview-pr-N`, then re-lists to verify absence. It never deletes by prefix or deletes the resource group. Reporting uses the bot-owned `<!-- cdd-pr-cleanup-status -->` comment, validates `status=success,result=deleted|not-found` (unknown results fail), and fails visibly if publication fails.
 
-**Ordering.** `pr-cleanup.yml` uses the same concurrency group value as `ci.yml` (`cdd-preview-pr-<N>`, `cancel-in-progress: false`), so a running deploy finishes before cleanup starts. GitHub keeps one pending run per group and replaces an older pending run with a newer one, so the latest event for a PR (update or close) wins and a closed PR cannot be redeployed by an older queued run. One residual case: manually dispatching `ci.yml` with the number of an already-closed PR recreates a preview that no close event will remove; delete it with the manual procedure below.
+**Serialization, not ordered delivery.** Both mutation workflows use `cdd-preview-pr-<N>` with `cancel-in-progress: false`. GitHub concurrency retains at most one pending job and may replace it; it is not a durable ordered queue. Safety comes from re-fetching lifecycle/head under the lock and before mutations: open/stale CI skips, current open CI deploys, closed CI reconciles ownership-verified cleanup, and automatic/reconcile close cleanup skips if reopened. A close after the final deploy gate is handled by serialized cleanup; manual preview of a closed PR reconciles cleanup rather than recreating it. Explicit `manual-cleanup` remains available for open-PR cost control.
 
 **Previews that predate this workflow** (for example `preview-pr-3`, whose PR closed before cleanup existed) are never cleaned automatically. Delete them with the manual procedure below.
 
-### Observed live validation (2026-11-11)
+### Historical observed live validation (2026-11-11; later cleanup observation dated separately)
 
 Environment: Azure for Students. The subscription's region policy allowed only `malaysiawest`, `koreacentral`, `eastasia`, `uaenorth`, and `polandcentral`, so previews use `cdd-preview-rg-koreacentral`. The deployer service principal has **Azure Container Instances Contributor** only at that group's scope. The GHCR package is public, so ACI pulls anonymously.
 
@@ -218,13 +257,15 @@ A **first** ACI creation in `koreacentral` took more than 15 minutes before the 
 
 Public HTTP demo only; do not send sensitive data. ACI groups bill while running. A preview whose PR closed before the cleanup workflow existed (such as `preview-pr-3`) keeps running until you delete it manually.
 
+These are dated historical observations, not a present-time resource inventory or candidate acceptance claim. Repository secret names `AZURE_CREDENTIALS` and `AZURE_RESOURCE_GROUP` and variable `PREVIEW_DNS_PREFIX` were observed during completion discovery; values were not extracted, and names alone do not establish valid credentials or current cloud access. Historical merged PR #6 cleanup run [44119488568](https://github.com/prabalpratapsinghmer/CDD-project/actions/runs/44119488568) and its [bot deletion report](https://github.com/prabalpratapsinghmer/CDD-project/pull/6#issuecomment-6953200670) are installed-main evidence only, not current Azure absence proof.
+
 ### Repeat procedure for future live validation
 
-1. Complete provisioning/secrets and confirm quota for two previews. Open two trusted demo PRs A and B with visibly distinct page content. Record both PR numbers, commit SHAs, image references, resource names/tags, Actions run links, actual reported URLs, and HTTP response content/screenshots.
-2. Confirm each run is green only after readiness; use the reported URLs to verify A and B display their own content. Record actual Azure `Succeeded` state and requested image for each. URLs must differ between PRs.
-3. Push visibly changed content to A. Record its new commit/image and run. Confirm A's **exact URL is unchanged**, its response reflects the new content, and its PR comment/status updates in place. Recheck B's URL, image and content are unchanged. A `200` alone is insufficient revision proof.
-4. Record a controlled failure (for example, a nonexistent image via a trusted local invocation) and confirm nonzero exit, failure output, empty URL, and, for workflow failures, red status/no success link. Do not corrupt real credentials or another PR's resource for this exercise.
-5. Preserve the non-secret records before cleanup. Stop/finish all runs for each demo PR and ensure no update can be queued. Verify exact ownership before deleting only that PR's container group in a trusted admin session:
+1. Confirm scoped secrets and quota; inventory historical PRs first using candidate `verify/inventory`. Open two controlled PRs A/B with distinct visible content. Record PR numbers, full SHAs, revision images, tags, run/comment links, actual URLs and screenshots.
+2. Dispatch candidate previews as needed; use `verify/both-present` to prove owned/current images, provisioning and actual public HTTP. Open both URLs and verify revision/content; a green build alone is insufficient.
+3. Update A and record its new SHA/image, exact stable URL and unchanged bot comment ID. Recheck B's image/content/URL unchanged. Dispatch preview from A's candidate workflow ref targeting B and distinguish workflow SHA from B's resolved head using checkout, OCI labels, page/API, deployed image and status evidence.
+4. On disposable B only, exercise the approved cloud-only HTTP failure while leaving local image smoke successful. Record exact failing revision, provisioning/readiness evidence, red status and no success URL; never alter credentials or A for the fault. Close B unmerged, prove automatic B deletion with A healthy, repeat candidate reconcile for `success/not-found`, then use `verify/a-present-b-absent`. Do not move B's failure code into A.
+5. Preserve sanitized records/screenshots before deletion. Exercise reconcile against open A to demonstrate it skips; after final documentation commits settle, use candidate `cleanup/manual-cleanup` on A and `verify/both-absent`. Leave A open/unmerged and explain its preview was removed for cost control. Do not push after terminal cleanup because a push can recreate its preview. If dispatched cleanup is unavailable, the trusted administrator recovery below requires exact ownership verification:
 
 ```bash
 [[ "$PR_NUMBER" =~ ^[1-9][0-9]{0,9}$ ]] || { printf '%s\n' 'Invalid PR number; refusing cleanup.' >&2; exit 1; }
@@ -246,7 +287,7 @@ assert all((resource.get("tags") or {}).get(k) == v for k, v in expected.items()
 
 Run separately for A and B; verify their absence and record cleanup outcomes. Do not delete if lookup/tag verification fails. This manual recovery procedure is not close-event automation.
 
-### Additional local verification
+### Historical additional local verification
 - `bash -n scripts/deploy-preview.sh`, `flake8 app.py tests`, and `actionlint .github/workflows/ci.yml` passed.
 - `pytest -v`: **33 passed**, covering isolation/update behavior, public and private registry paths, ownership refusal, validation, credential-safe errors, invalid provisioning/image/FQDN/IP results, and HTTP failure.
 - A separate smoke run executed the deployment shell with Azure CLI **2.92.0**'s real JSON-file loader, intercepted Azure requests, and real local HTTP responses. Two simulated groups coexisted; updating PR 31 kept its URL and left PR 32's response unchanged. Failure-reporting shell execution also removed a stale URL while retaining the failure reason.
