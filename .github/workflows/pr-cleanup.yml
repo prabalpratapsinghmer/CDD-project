@@ -4,43 +4,69 @@ on:
   pull_request:
     types: [closed]
 
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+# Same group as ci.yml: cleanup waits for an in-flight deploy of this PR instead of racing it.
+concurrency:
+  group: cdd-preview-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
 jobs:
   cleanup:
     name: Delete PR Preview Resources
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - name: Check for Azure Credentials
-        id: check_creds
-        run: |
-          if [[ -z "${{ secrets.AZURE_CREDENTIALS }}" ]]; then
-            echo "AZURE_CREDENTIALS not set. Skipping cloud cleanup."
-            echo "skip_cleanup=true" >> $GITHUB_OUTPUT
-          else
-            echo "skip_cleanup=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Identify Closing PR Resources
-        if: steps.check_creds.outputs.skip_cleanup == 'false'
-        run: |
-          echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
-          echo "RESOURCE_NAME=preview-pr-${{ github.event.pull_request.number }}" >> $GITHUB_ENV
-          echo "RESOURCE_GROUP=${{ secrets.AZURE_RESOURCE_GROUP || 'cdd-preview-rg' }}" >> $GITHUB_ENV
-
-      - name: Azure Login
-        if: steps.check_creds.outputs.skip_cleanup == 'false'
-        uses: azure/login@v2
+      # Run the script from the base branch, never from the PR's own (untrusted) code: this job holds Azure credentials.
+      - name: Checkout cleanup script from base branch
+        uses: actions/checkout@v4
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          ref: ${{ github.event.pull_request.base.ref }}
 
-      - name: Delete Azure Container Instance
-        if: steps.check_creds.outputs.skip_cleanup == 'false'
-        run: |
-          echo "Targeting ACI: $RESOURCE_NAME in Resource Group: $RESOURCE_GROUP"
-          
-          # Delete the container group. "|| true" makes it idempotent (won't fail if already deleted)
-          az container delete \
-            --name "$RESOURCE_NAME" \
-            --resource-group "$RESOURCE_GROUP" \
-            --yes || true
-            
-          echo "Cleanup complete for PR #$PR_NUMBER!"
+      - name: Delete Preview Container Group
+        id: cleanup
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+          AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP || 'cdd-preview-rg' }}
+          PREVIEW_DNS_PREFIX: ${{ vars.PREVIEW_DNS_PREFIX }}
+        run: bash scripts/cleanup-preview.sh
+
+      # A failed cleanup step already fails the job; this step only makes the outcome visible on the PR.
+      - name: Report Cleanup on the PR
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          STATUS: ${{ steps.cleanup.outputs.status || 'failure' }}
+          RESULT: ${{ steps.cleanup.outputs.result }}
+          ERROR_MESSAGE: ${{ steps.cleanup.outputs.error_message || 'Cleanup did not run to completion; see the workflow log.' }}
+        with:
+          script: |
+            const pr = process.env.PR_NUMBER;
+            const marker = '<!-- cdd-pr-cleanup-status -->';
+            let text;
+            if (process.env.STATUS !== 'success') {
+              text = `⚠️ **Preview cleanup failed** — \`preview-pr-${pr}\` may still be running and billing.\n\n\`\`\`\n${process.env.ERROR_MESSAGE}\n\`\`\`\nManual recovery: ${context.payload.repository.html_url}/blob/main/docs/CI_SECRETS_SETUP.md#5-member-4-cleanup-and-recovery`;
+            } else if (process.env.RESULT === 'deleted') {
+              text = `🧹 **Preview removed** — \`preview-pr-${pr}\` was deleted; its URL no longer serves this PR.`;
+            } else {
+              text = `🧹 **Nothing to clean up** — no preview existed for \`preview-pr-${pr}\`.`;
+            }
+            const body = `${marker}\n${text}`;
+            const { owner, repo } = context.repo;
+            const issue_number = parseInt(pr, 10);
+            try {
+              const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number });
+              const existing = comments.find(c => c.body && c.body.includes(marker));
+              if (existing) {
+                await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+              } else {
+                await github.rest.issues.createComment({ owner, repo, issue_number, body });
+              }
+            } catch (err) {
+              console.warn(`Could not comment on PR #${pr}: ${err.message}`);
+            }
