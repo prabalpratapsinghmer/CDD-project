@@ -3,106 +3,70 @@ name: PR-Close Cleanup
 on:
   pull_request:
     types: [closed]
-    branches: [main]
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
+
+# Same group as ci.yml: cleanup waits for an in-flight deploy of this PR instead of racing it.
+concurrency:
+  group: cdd-preview-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
 
 jobs:
-  resolve:
-    name: Resolve Closed PR Context
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    outputs:
-      pr_number: ${{ steps.context.outputs.pr_number }}
-      commit_sha: ${{ steps.context.outputs.commit_sha }}
-      disposition: ${{ steps.context.outputs.disposition }}
-    steps:
-      - name: Checkout trusted base-main control code
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository }}
-          ref: refs/heads/main
-          path: control
-          persist-credentials: false
-      - name: Resolve current PR through API
-        id: context
-        uses: actions/github-script@v7
-        with:
-          script: |
-            try {
-              await require('./control/.github/scripts/preview-context.cjs').resolve({ github, context, core });
-            } catch { core.setFailed('Close context resolution failed: validate same-repository PR and API availability.'); }
-
   cleanup:
-    name: Delete Owned Closed-PR Preview
-    needs: resolve
-    if: needs.resolve.outputs.disposition == 'cleanup'
+    name: Delete PR Preview Resources
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      issues: write
-      pull-requests: write
-    # Shared mutation serialization, not a durable ordered lifecycle queue.
-    concurrency:
-      group: cdd-preview-pr-${{ needs.resolve.outputs.pr_number }}
-      cancel-in-progress: false
-    env:
-      PR_NUMBER: ${{ needs.resolve.outputs.pr_number }}
-      COMMIT_SHA: ${{ needs.resolve.outputs.commit_sha }}
-      POLICY_TRIGGER: close
+    timeout-minutes: 15
     steps:
-      - name: Checkout trusted base-main cleanup code, never PR head
+      # Run the script from the base branch, never from the PR's own (untrusted) code: this job holds Azure credentials.
+      - name: Checkout cleanup script from base branch
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository }}
-          ref: refs/heads/main
-          path: control
-          persist-credentials: false
-      - name: Recheck closed state after acquiring mutation lock
-        id: gate
-        uses: actions/github-script@v7
-        with:
-          script: |
-            try {
-              await require('./control/.github/scripts/preview-context.cjs').guard({ github, context, core });
-            } catch { core.setFailed('Locked close context check failed.'); }
-      - name: Delete preview and verify post-delete absence
+          ref: ${{ github.event.pull_request.base.ref }}
+
+      - name: Delete Preview Container Group
         id: cleanup
-        if: steps.gate.outputs.action == 'cleanup'
         env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
           AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP || 'cdd-preview-rg' }}
           PREVIEW_DNS_PREFIX: ${{ vars.PREVIEW_DNS_PREFIX }}
-        run: bash control/scripts/cleanup-preview.sh
-      - name: Publish cleanup result without hiding reporting failures
-        if: always() && steps.gate.outputs.action == 'cleanup'
+        run: bash scripts/cleanup-preview.sh
+
+      # A failed cleanup step already fails the job; this step only makes the outcome visible on the PR.
+      - name: Report Cleanup on the PR
+        if: always()
         uses: actions/github-script@v7
         env:
-          CLEANUP_STATUS: ${{ steps.cleanup.outputs.status }}
-          CLEANUP_RESULT: ${{ steps.cleanup.outputs.result }}
-          CLEANUP_OUTCOME: ${{ steps.cleanup.outcome }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          STATUS: ${{ steps.cleanup.outputs.status || 'failure' }}
+          RESULT: ${{ steps.cleanup.outputs.result }}
+          ERROR_MESSAGE: ${{ steps.cleanup.outputs.error_message || 'Cleanup did not run to completion; see the workflow log.' }}
         with:
           script: |
+            const pr = process.env.PR_NUMBER;
+            const marker = '<!-- cdd-pr-cleanup-status -->';
+            let text;
+            if (process.env.STATUS !== 'success') {
+              text = `⚠️ **Preview cleanup failed** — \`preview-pr-${pr}\` may still be running and billing.\n\n\`\`\`\n${process.env.ERROR_MESSAGE}\n\`\`\`\nManual recovery: ${context.payload.repository.html_url}/blob/main/docs/CI_SECRETS_SETUP.md#5-member-4-cleanup-and-recovery`;
+            } else if (process.env.RESULT === 'deleted') {
+              text = `🧹 **Preview removed** — \`preview-pr-${pr}\` was deleted; its URL no longer serves this PR.`;
+            } else {
+              text = `🧹 **Nothing to clean up** — no preview existed for \`preview-pr-${pr}\`.`;
+            }
+            const body = `${marker}\n${text}`;
+            const { owner, repo } = context.repo;
+            const issue_number = parseInt(pr, 10);
             try {
-              await require('./control/.github/scripts/preview-report.cjs').cleanup({ github, context, core });
-            } catch { core.setFailed('Close cleanup reporting failed safely.'); }
-      - name: Upload declared sanitized cleanup evidence
-        if: always() && steps.cleanup.outputs.evidence_path != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: preview-close-cleanup-${{ needs.resolve.outputs.pr_number }}-${{ github.run_attempt }}
-          path: ${{ steps.cleanup.outputs.evidence_path }}
-          if-no-files-found: error
-      - name: Summarize declared cleanup evidence
-        if: always()
-        env:
-          EVIDENCE_PATH: ${{ steps.cleanup.outputs.evidence_path }}
-        run: |
-          if [[ -n "$EVIDENCE_PATH" && -f "$EVIDENCE_PATH" ]]; then
-            printf '### Sanitized close-cleanup evidence\n```json\n' >> "$GITHUB_STEP_SUMMARY"
-            cat "$EVIDENCE_PATH" >> "$GITHUB_STEP_SUMMARY"
-            printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
-          fi
+              const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number });
+              const existing = comments.find(c => c.body && c.body.includes(marker));
+              if (existing) {
+                await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+              } else {
+                await github.rest.issues.createComment({ owner, repo, issue_number, body });
+              }
+            } catch (err) {
+              console.warn(`Could not comment on PR #${pr}: ${err.message}`);
+            }
