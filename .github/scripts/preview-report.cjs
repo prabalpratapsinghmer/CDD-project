@@ -2,21 +2,41 @@
 
 const { guard, prNumber } = require('./preview-context.cjs');
 
+function publicationFailure(stage, error) {
+  const safe = new Error('Preview publication request failed.');
+  safe.stage = stage;
+  safe.status = Number.isInteger(error?.status) && error.status >= 100 && error.status <= 599
+    ? error.status : undefined;
+  return safe;
+}
+
 async function comment(github, context, number, marker, body) {
-  const comments = await github.paginate(github.rest.issues.listComments, {
-    ...context.repo, issue_number: number, per_page: 100,
-  });
-  const existing = comments.find(item => item.user?.login === 'github-actions[bot]'
-    && item.user?.type === 'Bot' && item.body?.includes(marker));
-  if (existing) {
-    await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body });
-  } else {
-    await github.rest.issues.createComment({ ...context.repo, issue_number: number, body });
+  let stage = 'list';
+  try {
+    const comments = await github.paginate(github.rest.issues.listComments, {
+      ...context.repo, issue_number: number, per_page: 100,
+    });
+    const existing = comments.find(item => item.user?.login === 'github-actions[bot]'
+      && item.user?.type === 'Bot' && item.body?.includes(marker));
+    if (existing) {
+      stage = 'update';
+      await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body });
+    } else {
+      stage = 'create';
+      await github.rest.issues.createComment({ ...context.repo, issue_number: number, body });
+    }
+  } catch (error) {
+    // Discard response bodies, request headers and raw API messages.
+    throw publicationFailure(stage, error);
   }
 }
 
-async function failed(core, channel) {
-  const message = `Preview ${channel} publication failed; inspect repository token permissions and retry.`;
+async function failed(core, channel, error) {
+  const stage = ['list', 'update', 'create', 'create-status'].includes(error?.stage)
+    ? error.stage : 'unknown';
+  const status = Number.isInteger(error?.status) && error.status >= 100 && error.status <= 599
+    ? String(error.status) : 'unavailable';
+  const message = `Preview ${channel} publication failed (stage=${stage}, HTTP status=${status}); inspect repository token permissions and retry.`;
   core.error(message);
   core.setFailed(message);
   try {
@@ -53,16 +73,16 @@ async function preview({ github, context, core }) {
       context: 'PR Preview Deployment', description: success ? 'Preview environment is live' : 'Preview build or deployment failed',
       ...(success ? { target_url: url } : {}),
     });
-  } catch {
-    await failed(core, 'commit-status');
+  } catch (error) {
+    await failed(core, 'commit-status', publicationFailure('create-status', error));
   }
   // Recheck immediately before shared-comment mutation; never overwrite newer work.
   action = await guard(args);
   if (action !== 'deploy') return;
   try {
     await comment(github, context, number, marker, body);
-  } catch {
-    await failed(core, 'PR-comment');
+  } catch (error) {
+    await failed(core, 'PR-comment', error);
   }
 }
 
@@ -81,8 +101,8 @@ async function cleanup({ github, context, core }) {
   try {
     await comment(github, context, number, '<!-- cdd-pr-cleanup-status -->',
       `<!-- cdd-pr-cleanup-status -->\n${text}\n\nResource: \`preview-pr-${number}\`.`);
-  } catch {
-    await failed(core, 'cleanup-comment');
+  } catch (error) {
+    await failed(core, 'cleanup-comment', error);
   }
 }
 

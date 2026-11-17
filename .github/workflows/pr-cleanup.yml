@@ -44,6 +44,7 @@ jobs:
     permissions:
       contents: read
       issues: write
+      pull-requests: write
     # Shared mutation serialization, not a durable ordered lifecycle queue.
     concurrency:
       group: cdd-preview-pr-${{ needs.resolve.outputs.pr_number }}
