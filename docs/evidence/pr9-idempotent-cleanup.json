@@ -1,0 +1,24 @@
+{
+  "operation": "cleanup",
+  "records": [
+    {
+      "pr_number": "9",
+      "resource_name": "preview-pr-9",
+      "present": false,
+      "image": null,
+      "tags": null,
+      "provisioning_state": null,
+      "fqdn": null,
+      "ip": null,
+      "http": null,
+      "deletion_requested": null,
+      "verified_absent": true,
+      "status": "success",
+      "result": "not-found",
+      "error": ""
+    }
+  ],
+  "quota": null,
+  "status": "success",
+  "error": ""
+}

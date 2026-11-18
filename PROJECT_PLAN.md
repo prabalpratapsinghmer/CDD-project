@@ -120,15 +120,20 @@ Assign these roles to the five teammates. Replace the labels with names. Agree o
 
 ## Demo checklist
 
-- [ ] Create a branch with an obvious website change and open a PR.
-- [ ] Show the CI build/deploy check running; wait for verified readiness and the actual preview URL. Allow for variable cold starts; use a pre-warmed preview and dated backup evidence rather than promising a fixed duration.
-- [ ] Open the URL and show the PR's change live.
-- [ ] Push a second visible change and show the same PR preview updates.
-- [ ] Optionally open a second PR and show its distinct URL/content.
-- [ ] Close the first PR and show its preview resource is removed while the second preview remains.
-- [ ] Show the CI result and documented setup/cleanup path.
+- [x] Open implementation A #8 and disposable B #9 with visibly distinct content.
+- [x] Demonstrate actual simultaneous owned/current/healthy previews, not just green builds.
+- [x] Push a visible A update; prove the exact URL and bot comment ID stay stable while B remains unchanged.
+- [x] Select A's candidate workflow but explicitly target B; verify B's full application head across revision surfaces.
+- [x] Provision B's deliberate failing image, show real HTTP 503 and fail-visible reporting without a success URL.
+- [x] Close B unmerged, distinguish installed-main automatic deletion from candidate behavior, and repeat candidate cleanup with `not-found`.
+- [x] Verify A healthy/current and B absent; preserve actual captures and artifact links.
+- [ ] Finish the pre-cleanup commit/push and let its final A deployment settle.
+- [ ] Intentionally clean A, strictly verify both previews absent, leave A open/unmerged, and publish terminal evidence in the reserved comment; do not push afterward.
 
 For completion-candidate verification, use the exact `preview`, read-only `verify`, and guarded `cleanup` dispatch examples in `docs/CI_SECRETS_SETUP.md`. Verify two current owned images and public URLs, stable same-PR addressing, sibling isolation, fail-visible reporting and repeated deletion. Preserve evidence before removing only the test PR resources. Leave the implementation PR open/unmerged and intentionally remove its billable preview at the end.
+
+The dated [acceptance evidence and repeatable demo](docs/ACCEPTANCE_EVIDENCE.md) records full SHAs, live runs, screenshots, observed failures/recovery, local-versus-cloud proof, and candidate-versus-installed-main limitations. The final terminal addendum belongs in [reserved acceptance comment 6954553166](https://github.com/prabalpratapsinghmer/CDD-project/pull/8#issuecomment-6954553166), updated only after cleanup and strict absence verification are observed. The unchecked terminal items above are deliberately not claimed by this pre-cleanup document.
+
 
 ## Project completion
 
