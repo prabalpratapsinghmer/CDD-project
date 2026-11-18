@@ -79,6 +79,9 @@ def test_partial_revision_is_not_presented_as_ci_build(
     set_build_env(monkeypatch, **{missing_field: ''})
     page = client.get('/').get_data(as_text=True)
     assert 'Local development — CI revision metadata unavailable.' in page
+    # Not a CI build, but whatever was supplied is still shown, not hidden.
+    assert BUILD_ENV['BRANCH'] in page
+    assert BUILD_ENV['IMAGE_TAG'] in page
     supplied_field = (
         'COMMIT_SHA' if missing_field == 'PR_NUMBER' else 'PR_NUMBER')
     data = client.get('/api/info').get_json()
