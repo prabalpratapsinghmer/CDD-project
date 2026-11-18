@@ -54,6 +54,14 @@ def test_revision_metadata_cannot_inject_html(client, monkeypatch, field):
     assert data[field.lower()] == payload
 
 
+def test_page_title_names_the_pr_only_for_ci_builds(client, monkeypatch):
+    local = client.get('/').get_data(as_text=True)
+    assert '<title>CDD Project' in local
+    set_build_env(monkeypatch)
+    ci = client.get('/').get_data(as_text=True)
+    assert '<title>PR #7 · CDD Project' in ci
+
+
 def test_local_run_renders_without_ci_metadata(client):
     response = client.get('/')
     assert response.status_code == 200

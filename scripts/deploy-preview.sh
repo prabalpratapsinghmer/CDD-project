@@ -206,7 +206,7 @@ PREVIEW_URL="http://${FQDN}:${CONTAINER_PORT}"
 failure_reason="Preview HTTP readiness failed; check application startup, PORT binding, ACI container logs and public network reachability."
 # Runners can have flaky ACI DNS; connect to the known IP while preserving the FQDN Host header.
 if curl --fail --silent --show-error --noproxy '*' --connect-timeout 5 --max-time 10 \
-  --retry 60 --retry-delay 5 --retry-all-errors --retry-max-time 300 --output /dev/null \
+  --retry 60 --retry-delay 5 --retry-all-errors --retry-max-time 900 --output /dev/null \
   --resolve "${FQDN}:${CONTAINER_PORT}:${CONTAINER_IP}" \
   --write-out '%{http_code}' "$PREVIEW_URL/" >"$work_dir/http-status" 2>"$work_dir/http-error.log"; then
   http_code=$(<"$work_dir/http-status")

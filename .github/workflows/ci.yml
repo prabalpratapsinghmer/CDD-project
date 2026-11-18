@@ -32,6 +32,11 @@ on:
 permissions:
   contents: read
 
+env:
+  # Secret-bearing control code must not come from the PR itself. On pull_request events
+  # github.workflow_sha is the PR's merge commit, so use the base branch there instead.
+  CONTROL_REF: ${{ github.event_name == 'pull_request' && format('refs/heads/{0}', github.event.pull_request.base.ref) || github.workflow_sha }}
+
 jobs:
   resolve:
     name: Resolve Trusted PR Context
@@ -56,7 +61,7 @@ jobs:
       - name: Checkout trusted workflow control
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.workflow_sha }}
+          ref: ${{ env.CONTROL_REF }}
           path: control
           persist-credentials: false
       - name: Resolve API context before scheduling credentials
@@ -96,7 +101,7 @@ jobs:
         id: control
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.workflow_sha }}
+          ref: ${{ env.CONTROL_REF }}
           path: control
           persist-credentials: false
       - name: Recheck lifecycle after acquiring mutation lock
@@ -107,9 +112,9 @@ jobs:
             try {
               await require('./control/.github/scripts/preview-context.cjs').guard({ github, context, core });
             } catch { core.setFailed('Locked preview context check failed.'); }
-      - name: Test trusted lifecycle policy
+      - name: Test trusted lifecycle helpers
         if: steps.start.outputs.action == 'deploy'
-        run: node --test control/.github/scripts/preview-policy.test.cjs
+        run: node --test control/.github/scripts/*.test.cjs
       - name: Checkout resolved application revision
         if: steps.start.outputs.action == 'deploy'
         uses: actions/checkout@v4
@@ -331,7 +336,7 @@ jobs:
       - name: Checkout selected trusted candidate workflow
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.workflow_sha }}
+          ref: ${{ env.CONTROL_REF }}
           path: control
           persist-credentials: false
       - name: Recheck cleanup intent inside mutation lock
@@ -392,7 +397,7 @@ jobs:
       - name: Checkout selected trusted verifier
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.workflow_sha }}
+          ref: ${{ env.CONTROL_REF }}
           path: control
           persist-credentials: false
       - name: Verify observed owned resources and public HTTP

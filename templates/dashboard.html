@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#090D16">
-<title>CDD Project — PR Preview Environment</title>
+<title>{% if info.pr_number and info.commit_sha %}PR #{{ info.pr_number }} · {% endif %}CDD Project — PR Preview Environment</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath fill='%2367E8F9' d='M10 0h30v30L30 40H0V10z'/%3E%3Cpath d='M27 12a11 11 0 1 0 0 16' fill='none' stroke='%23090D16' stroke-width='5'/%3E%3C/svg%3E">
 <style>
 /* Design system and responsive shell */

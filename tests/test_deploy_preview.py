@@ -129,6 +129,7 @@ def deployment(tmp_path):
     env = {
         'PATH': str(bin_dir) + os.pathsep + os.defpath,
         'HOME': str(tmp_path),
+        'RUNNER_TEMP': str(tmp_path),
         'NO_PROXY': '*',
         'FAKE_AZ_STATE': str(state_path),
         'PR_NUMBER': '41',
