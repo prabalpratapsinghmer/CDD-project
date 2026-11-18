@@ -1,0 +1,10 @@
+{
+  "run_url": "https://github.com/prabalpratapsinghmer/CDD-project/actions/runs/44135130869",
+  "workflow_sha": "823f9530c3aca285edb3320944fbd44dfddb6bc9",
+  "application_sha": "72f9a97506354ab0f12feca857a53e8faceb6270",
+  "observed_checkout_lines": [
+    "Resolve Trusted PR Context\tCheckout trusted workflow control\t2026-11-17T17:16:30.4410367Z   ref: 823f9530c3aca285edb3320944fbd44dfddb6bc9",
+    "Validate, Publish, Deploy and Report\tCheckout trusted workflow control\t2026-11-17T17:16:46.7116839Z   ref: 823f9530c3aca285edb3320944fbd44dfddb6bc9",
+    "Validate, Publish, Deploy and Report\tCheckout resolved application revision\t2026-11-17T17:16:49.0359811Z   ref: 72f9a97506354ab0f12feca857a53e8faceb6270"
+  ]
+}

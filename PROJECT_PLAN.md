@@ -4,9 +4,9 @@
 
 **Goal:** Let a team safely review each website change before it reaches production. Every pull request (PR) automatically builds and deploys an isolated preview website at a shareable URL. When the PR is merged or closed, its preview is removed.
 
-**Demo promise:** Open a PR, wait about two minutes for the CI/CD pipeline, then share its live preview link with the professor. The link shows that PR's version—not the production site or another PR's build.
+**Demo approach:** Open a controlled PR, wait for observed readiness, then share its reported preview link. There is no two-minute guarantee: historical first ACI creation took over 15 minutes before reliable FQDN reachability, with warm updates around 2.5–3 minutes. Pre-warm for the presentation and keep workflow, screenshot and cleanup evidence available.
 
-**Repository status:** This repository was empty when this guide was created. The team still needs to choose and implement the website, hosting target, and CI/CD provider. The plan below recommends a straightforward Docker + Azure Container Instances (ACI) path; adapt it if course constraints or available credentials require another target. Keep the preview lifecycle and PR behavior the same.
+**Historical starting point:** The repository was empty when this guide was first created; that statement is not current status. The integrated implementation now uses Flask, a pinned Python 3.11 Docker base/dependency set, GitHub Actions, GHCR and ACI. See `Readme.md` for the existing container/PORT contract and `docs/CI_SECRETS_SETUP.md` for the current runbook and dated observations. Candidate implementation is reviewed without merging main: main's installed automatic workflows are unchanged until review/merge, and candidate control logic must be exercised using the CI workflow's explicit candidate ref dispatch.
 
 ## What the finished system does
 
@@ -114,19 +114,26 @@ Assign these roles to the five teammates. Replace the labels with names. Agree o
 | PR close cleanup | Member 4 | PR-specific resource deletion result |
 | End-to-end verification and guide | Member 5 | Acceptance evidence and demo checklist |
 
-**First team meeting:** assign names; choose the application stack, CI provider, registry, and hosting target; confirm access/credits; agree image name, port, resource naming, URL output, and secrets; split work by the five roles. The suggested Azure path is a recommendation, not a claim that cloud resources or credentials already exist.
+**Original first-meeting guidance (historical):** assign names; choose the stack, CI, registry and hosting; confirm access/credits and agree interfaces. Those initial selections are now Flask, GitHub Actions, GHCR and ACI. Keep Member 3 identified as Pratham; do not infer other teammates' names. Secret names have been observed, but presence does not establish valid Azure access.
 
 **Integration order:** Member 1 establishes the build/container contract. Members 2 and 3 agree the image and deploy interface. Member 4 uses the same PR resource naming and event lifecycle. Member 5 runs the complete flow only after those interfaces are wired together.
 
 ## Demo checklist
 
-- [ ] Create a branch with an obvious website change and open a PR.
-- [ ] Show the CI build/deploy check running; wait for success and the preview URL (target: about two minutes, dependent on provider and cold-start time).
-- [ ] Open the URL and show the PR's change live.
-- [ ] Push a second visible change and show the same PR preview updates.
-- [ ] Optionally open a second PR and show its distinct URL/content.
-- [ ] Close the first PR and show its preview resource is removed while the second preview remains.
-- [ ] Show the CI result and documented setup/cleanup path.
+- [x] Open implementation A #8 and disposable B #9 with visibly distinct content.
+- [x] Demonstrate actual simultaneous owned/current/healthy previews, not just green builds.
+- [x] Push a visible A update; prove the exact URL and bot comment ID stay stable while B remains unchanged.
+- [x] Select A's candidate workflow but explicitly target B; verify B's full application head across revision surfaces.
+- [x] Provision B's deliberate failing image, show real HTTP 503 and fail-visible reporting without a success URL.
+- [x] Close B unmerged, distinguish installed-main automatic deletion from candidate behavior, and repeat candidate cleanup with `not-found`.
+- [x] Verify A healthy/current and B absent; preserve actual captures and artifact links.
+- [ ] Finish the pre-cleanup commit/push and let its final A deployment settle.
+- [ ] Intentionally clean A, strictly verify both previews absent, leave A open/unmerged, and publish terminal evidence in the reserved comment; do not push afterward.
+
+For completion-candidate verification, use the exact `preview`, read-only `verify`, and guarded `cleanup` dispatch examples in `docs/CI_SECRETS_SETUP.md`. Verify two current owned images and public URLs, stable same-PR addressing, sibling isolation, fail-visible reporting and repeated deletion. Preserve evidence before removing only the test PR resources. Leave the implementation PR open/unmerged and intentionally remove its billable preview at the end.
+
+The dated [acceptance evidence and repeatable demo](docs/ACCEPTANCE_EVIDENCE.md) records full SHAs, live runs, screenshots, observed failures/recovery, local-versus-cloud proof, and candidate-versus-installed-main limitations. The final terminal addendum belongs in [reserved acceptance comment 6954553166](https://github.com/prabalpratapsinghmer/CDD-project/pull/8#issuecomment-6954553166), updated only after cleanup and strict absence verification are observed. The unchecked terminal items above are deliberately not claimed by this pre-cleanup document.
+
 
 ## Project completion
 

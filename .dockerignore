@@ -1,4 +1,5 @@
 .git
+.github
 .venv
 .env
 .env.*
@@ -6,6 +7,7 @@ __pycache__
 *.py[cod]
 .pytest_cache
 docs
+scripts
 tests
 PROJECT_PLAN.md
 Readme.md

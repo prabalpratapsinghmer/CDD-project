@@ -1,5 +1,5 @@
 import pytest
-from app import accent_hue, app, fingerprint
+from app import STARTED_AT, app
 
 BUILD_ENV = {
     'PR_NUMBER': '7',
@@ -29,53 +29,63 @@ def set_build_env(monkeypatch, **overrides):
 
 def test_ci_metadata_is_shown_and_linked(client, monkeypatch):
     set_build_env(monkeypatch)
-    page = client.get('/').get_data(as_text=True)
-    assert 'PR&nbsp;#7' in page
-    assert BUILD_ENV['COMMIT_SHA'] in page
-    assert 'feature/blue-header' in page
-    assert 'https://github.com/acme/demo/pull/7' in page
+    response = client.get('/')
+    assert response.status_code == 200
+    page = response.get_data(as_text=True)
+    for key in ('COMMIT_SHA', 'BRANCH', 'IMAGE_TAG', 'BUILD_TIME'):
+        assert BUILD_ENV[key] in page
     repo = BUILD_ENV['REPO_URL']
+    assert f'{repo}/pull/7' in page
     assert f"{repo}/commit/{BUILD_ENV['COMMIT_SHA']}" in page
     assert BUILD_ENV['RUN_URL'] in page
-    assert BUILD_ENV['IMAGE_TAG'] in page
-    assert 'Local build' not in page
+    assert 'Local development — CI revision metadata unavailable.' not in page
 
 
-def test_branch_name_cannot_inject_html(client, monkeypatch):
-    set_build_env(monkeypatch, BRANCH='<script>alert(1)</script>')
+@pytest.mark.parametrize('field', [
+    'PR_NUMBER', 'COMMIT_SHA', 'BRANCH', 'IMAGE_TAG', 'BUILD_TIME',
+])
+def test_revision_metadata_cannot_inject_html(client, monkeypatch, field):
+    payload = '<script>alert("revision")</script>'
+    set_build_env(monkeypatch, **{field: payload})
     page = client.get('/').get_data(as_text=True)
-    assert '<script>alert(1)</script>' not in page
-    assert '&lt;script&gt;alert(1)&lt;/script&gt;' in page
+    assert payload not in page
+    assert '&lt;script&gt;alert(&#34;revision&#34;)&lt;/script&gt;' in page
+    data = client.get('/api/info').get_json()
+    assert data[field.lower()] == payload
 
 
 def test_local_run_renders_without_ci_metadata(client):
     response = client.get('/')
     assert response.status_code == 200
     page = response.get_data(as_text=True)
-    assert 'Local build' in page
+    assert 'Local development — CI revision metadata unavailable.' in page
     assert '/pull/' not in page
+    data = client.get('/api/info').get_json()
+    for key in BUILD_ENV:
+        assert data[key.lower()] == ''
 
 
-def test_fingerprint_is_stable_per_commit_and_differs_between_commits():
-    bars = fingerprint('a' * 40)
-    assert bars == fingerprint('a' * 40)
-    assert bars != fingerprint('b' * 40)
-    assert len(bars) == 20 and all(0 <= bar < 360 for bar in bars)
-
-
-def test_consecutive_prs_get_clearly_different_accent_colours():
-    for number in range(1, 200):
-        a, b = accent_hue(str(number)), accent_hue(str(number + 1))
-        assert 0 <= a < 360
-        assert min((a - b) % 360, (b - a) % 360) > 90
-    assert accent_hue('') == accent_hue('not-a-number')
+@pytest.mark.parametrize('missing_field', ['PR_NUMBER', 'COMMIT_SHA'])
+def test_partial_revision_is_not_presented_as_ci_build(
+        client, monkeypatch, missing_field):
+    set_build_env(monkeypatch, **{missing_field: ''})
+    page = client.get('/').get_data(as_text=True)
+    assert 'Local development — CI revision metadata unavailable.' in page
+    supplied_field = (
+        'COMMIT_SHA' if missing_field == 'PR_NUMBER' else 'PR_NUMBER')
+    data = client.get('/api/info').get_json()
+    assert data[missing_field.lower()] == ''
+    assert data[supplied_field.lower()] == BUILD_ENV[supplied_field]
 
 
 def test_api_info_reports_build_and_uptime(client, monkeypatch):
     set_build_env(monkeypatch)
-    data = client.get('/api/info').get_json()
-    assert data['pr_number'] == '7'
-    assert data['commit_sha'] == BUILD_ENV['COMMIT_SHA']
-    assert data['image_tag'] == BUILD_ENV['IMAGE_TAG']
+    response = client.get('/api/info')
+    assert response.status_code == 200
+    data = response.get_json()
+    for key, value in BUILD_ENV.items():
+        assert data[key.lower()] == value
     assert data['hostname']
+    assert data['started_at'] == STARTED_AT.isoformat()
+    assert isinstance(data['uptime_seconds'], int)
     assert data['uptime_seconds'] >= 0

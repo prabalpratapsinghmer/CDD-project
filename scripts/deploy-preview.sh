@@ -11,6 +11,9 @@ output_var() {
 
 fail() {
   printf 'ERROR: %s\n' "$1" >&2
+  if [[ -n "${evidence_path:-}" ]]; then
+    python3 "$evidence_helper" finish "$evidence_path" failure "$1" || true
+  fi
   output_var status failure
   output_var url ""
   output_var error_message "$1"
@@ -26,6 +29,8 @@ AZURE_RESOURCE_GROUP="${AZURE_RESOURCE_GROUP:-cdd-preview-rg}"
 PREVIEW_DNS_PREFIX="${PREVIEW_DNS_PREFIX:-}"
 IMAGE_REF="${IMAGE_REF:-}"
 
+evidence_helper="$(dirname "${BASH_SOURCE[0]}")/preview_evidence.py"
+evidence_path=$(python3 "$evidence_helper" init deploy "${PR_NUMBER:-unknown}")
 [[ "$PR_NUMBER" =~ ^[1-9][0-9]{0,9}$ ]] || fail "PR_NUMBER must be a positive integer of at most 10 digits."
 [[ "$CONTAINER_PORT" =~ ^[1-9][0-9]{0,4}$ ]] && (( CONTAINER_PORT <= 65535 )) || fail "CONTAINER_PORT must be between 1 and 65535."
 [[ "${RESOURCE_NAME:-preview-pr-${PR_NUMBER}}" == "preview-pr-${PR_NUMBER}" ]] || fail "RESOURCE_NAME must equal preview-pr-PR_NUMBER."
@@ -94,6 +99,7 @@ failure_reason="Preview ownership lookup failed; verify container group read per
 timeout 60 az container list --resource-group "$AZURE_RESOURCE_GROUP" \
   --query "[?name=='${RESOURCE_NAME}']" --output json >"$work_dir/existing.json" 2>"$work_dir/azure-error.log"
 failure_reason="Refusing to overwrite an existing container group without matching preview ownership tags."
+python3 "$evidence_helper" observe "$evidence_path" "$work_dir/existing.json" "$PREVIEW_DNS_PREFIX"
 python3 - "$work_dir/existing.json" "$PR_NUMBER" "$PREVIEW_DNS_PREFIX" <<'PY'
 import json
 import sys
@@ -166,6 +172,7 @@ timeout 600 az container create --resource-group "$AZURE_RESOURCE_GROUP" --name 
 failure_reason="ACI deployment inspection failed; verify container group read permission."
 timeout 60 az container show --resource-group "$AZURE_RESOURCE_GROUP" --name "$RESOURCE_NAME" \
   --output json >"$work_dir/deployed.json" 2>"$work_dir/azure-error.log"
+python3 "$evidence_helper" observe "$evidence_path" "$work_dir/deployed.json" "$PREVIEW_DNS_PREFIX"
 failure_reason="ACI did not report a successful deployment of the requested image with a valid FQDN/IP."
 mapfile -t network < <(python3 - "$work_dir/deployed.json" "$IMAGE_REF" <<'PY'
 import ipaddress
@@ -198,11 +205,22 @@ CONTAINER_IP="${network[1]}"
 PREVIEW_URL="http://${FQDN}:${CONTAINER_PORT}"
 failure_reason="Preview HTTP readiness failed; check application startup, PORT binding, ACI container logs and public network reachability."
 # Runners can have flaky ACI DNS; connect to the known IP while preserving the FQDN Host header.
-curl --fail --silent --show-error --noproxy '*' --connect-timeout 5 --max-time 10 \
-  --retry 60 --retry-delay 5 --retry-all-errors --output /dev/null \
+if curl --fail --silent --show-error --noproxy '*' --connect-timeout 5 --max-time 10 \
+  --retry 60 --retry-delay 5 --retry-all-errors --retry-max-time 300 --output /dev/null \
   --resolve "${FQDN}:${CONTAINER_PORT}:${CONTAINER_IP}" \
-  "$PREVIEW_URL/" 2>"$work_dir/http-error.log"
+  --write-out '%{http_code}' "$PREVIEW_URL/" >"$work_dir/http-status" 2>"$work_dir/http-error.log"; then
+  http_code=$(<"$work_dir/http-status")
+  [[ "$http_code" =~ ^[1-5][0-9]{2}$ ]] || http_code=null
+  python3 "$evidence_helper" set "$evidence_path" http "{\"success\":true,\"method\":\"ip-resolve\",\"status_code\":${http_code}}"
+else
+  http_exit=$?
+  http_code=$(<"$work_dir/http-status")
+  [[ "$http_code" =~ ^[1-5][0-9]{2}$ ]] || http_code=null
+  python3 "$evidence_helper" set "$evidence_path" http "{\"success\":false,\"method\":\"ip-resolve\",\"curl_exit\":${http_exit},\"status_code\":${http_code}}"
+  fail "$failure_reason"
+fi
 
+python3 "$evidence_helper" finish "$evidence_path" success ""
 output_var status success
 output_var url "$PREVIEW_URL"
 output_var error_message ""

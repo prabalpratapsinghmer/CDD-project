@@ -1,0 +1,77 @@
+{
+  "checked_on": "2026-11-18",
+  "scope": "Current-session HTTP smoke of previously built local image; no new build, suites, Git operations, or cloud operations.",
+  "image_id": "sha256:0496eb8a2a52f072933ee66dcfd978d80b6ec49de7dcc130e8d316a82dfdbfee",
+  "initial_container_state": "All three named verification containers running; no restart needed.",
+  "results": [
+    {
+      "container": "cdd-final-default-20261117",
+      "url": "http://127.0.0.1:32770",
+      "host_port": 32770,
+      "container_port": 8080,
+      "runtime_PORT": "8080",
+      "root_status": 200,
+      "root_content_type": "text/html; charset=utf-8",
+      "root_bytes": 44394,
+      "root_sha256": "d229c11ca9b7e406ebcafcc45a0f51a2a8b11f8e6f1bc796eea994696d079853",
+      "api_status": 200,
+      "api_content_type": "application/json",
+      "api_info": {
+        "pr_number": "8",
+        "commit_sha": "823f9530c3aca285edb3320944fbd44dfddb6bc9",
+        "branch": "completion/cdd-acceptance-20261117T161744Z",
+        "build_time": "2026-11-17T17:12:18Z",
+        "image_tag": "ghcr.io/prabalpratapsinghmer/cdd-project:pr-8-823f953",
+        "repo_url": "https://github.com/prabalpratapsinghmer/CDD-project",
+        "run_url": "https://github.com/prabalpratapsinghmer/CDD-project/actions/runs/44134165854",
+        "hostname": "9eb61057eed9",
+        "started_at": "2026-11-17T17:31:46.631246+00:00",
+        "uptime_seconds": 26345
+      }
+    },
+    {
+      "container": "cdd-final-override-20261117",
+      "url": "http://127.0.0.1:32771",
+      "host_port": 32771,
+      "container_port": 8090,
+      "runtime_PORT": "8090",
+      "root_status": 200,
+      "root_content_type": "text/html; charset=utf-8",
+      "root_bytes": 44394,
+      "root_sha256": "d229c11ca9b7e406ebcafcc45a0f51a2a8b11f8e6f1bc796eea994696d079853",
+      "api_status": 200,
+      "api_content_type": "application/json",
+      "api_info": {
+        "pr_number": "8",
+        "commit_sha": "823f9530c3aca285edb3320944fbd44dfddb6bc9",
+        "branch": "completion/cdd-acceptance-20261117T161744Z",
+        "build_time": "2026-11-17T17:12:18Z",
+        "image_tag": "ghcr.io/prabalpratapsinghmer/cdd-project:pr-8-823f953",
+        "repo_url": "https://github.com/prabalpratapsinghmer/CDD-project",
+        "run_url": "https://github.com/prabalpratapsinghmer/CDD-project/actions/runs/44134165854",
+        "hostname": "e175a2817ea3",
+        "started_at": "2026-11-17T17:31:47.020017+00:00",
+        "uptime_seconds": 26345
+      }
+    }
+  ],
+  "assertions_passed": [
+    "Both root and /api/info routes return HTTP 200 on inspected runtime PORT mappings.",
+    "Root contains title CDD Project — PR Preview Environment, overview/pipeline/architecture/lifecycle/resources sections, hero text, Preview revision, and rendered provenance.",
+    "Seven lowercase metadata fields exactly match inspected container environment.",
+    "API contains exactly seven metadata fields plus hostname, started_at, and uptime_seconds.",
+    "Hostname matches inspected container hostname, started_at is timezone-aware, and uptime_seconds is positive numeric."
+  ],
+  "assertion_correction": "Initial smoke assertion incorrectly expected exactly seven uppercase API keys; observed API has seven lowercase metadata fields and three runtime fields. Corrected smoke assertions passed for both containers; no application failure.",
+  "limitations": "HTTP/content proof only; no browser interaction or visual-layout assertion.",
+  "cleanup": {
+    "command": "docker rm --force cdd-final-default-20261117 cdd-final-override-20261117 cdd-verify-20261117",
+    "successful": true,
+    "removed_names": [
+      "cdd-final-default-20261117",
+      "cdd-final-override-20261117",
+      "cdd-verify-20261117"
+    ],
+    "scope": "Only the three explicitly authorized temporary verification containers."
+  }
+}

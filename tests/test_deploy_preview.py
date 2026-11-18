@@ -313,6 +313,14 @@ def test_unverified_container_never_publishes_url(deployment, fault, reason):
     result, outputs = deployment.run(FAKE_AZ_SHOW_FAULT=fault)
     assert_failure(result, outputs, reason)
     assert deployment.served == []
+    evidence_path = Path(outputs['evidence_path'])
+    evidence = json.loads(evidence_path.read_text())
+    record = evidence['records'][0]
+    assert evidence['status'] == 'failure'
+    assert record['present'] is True
+    assert record['http'] is None
+    assert record['image'] is not None
+    evidence_path.unlink()
 
 
 @pytest.mark.parametrize('tag, value', [

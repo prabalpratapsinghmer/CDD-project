@@ -6,306 +6,428 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
+      operation:
+        description: Preview deployment, read-only verification, or cleanup
+        type: choice
+        options: [preview, verify, cleanup]
+        default: preview
       pr_number:
-        description: 'Pull Request Number for preview deployment'
-        required: false
-        default: '1'
+        description: Existing same-repository PR number
+        type: string
+        required: true
+      peer_pr_number:
+        description: Distinct second PR (required for verify)
+        type: string
+      expectation:
+        description: Read-only verification expectation
+        type: choice
+        options: [inventory, both-present, a-present-b-absent, both-absent]
+        default: both-present
+      cleanup_mode:
+        description: Reconcile closed state or explicitly remove an owned preview
+        type: choice
+        options: [reconcile, manual-cleanup]
+        default: reconcile
 
 permissions:
   contents: read
-  packages: write
-  pull-requests: write
-  statuses: write
-  issues: write
-
-# Member 4's close workflow must use this same per-PR group.
-concurrency:
-  group: cdd-preview-pr-${{ github.event.pull_request.number || inputs.pr_number || '1' }}
-  cancel-in-progress: false
 
 jobs:
-  validate-and-build:
-    name: Validate and Build Image
+  resolve:
+    name: Resolve Trusted PR Context
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
-      pr_number: ${{ steps.vars.outputs.pr_number }}
-      commit_sha: ${{ steps.vars.outputs.commit_sha }}
-      short_sha: ${{ steps.vars.outputs.short_sha }}
-      repo_lower: ${{ steps.vars.outputs.repo_lower }}
-      primary_image_tag: ${{ steps.vars.outputs.primary_image_tag }}
+      operation: ${{ steps.context.outputs.operation }}
+      cleanup_mode: ${{ steps.context.outputs.cleanup_mode }}
+      disposition: ${{ steps.context.outputs.disposition }}
+      pr_number: ${{ steps.context.outputs.pr_number }}
+      commit_sha: ${{ steps.context.outputs.commit_sha }}
+      head_ref: ${{ steps.context.outputs.head_ref }}
+      repository: ${{ steps.context.outputs.repository }}
+      image: ${{ steps.context.outputs.image }}
+      peer_pr_number: ${{ steps.context.outputs.peer_pr_number }}
+      peer_sha: ${{ steps.context.outputs.peer_sha }}
+      peer_image: ${{ steps.context.outputs.peer_image }}
+      expectation: ${{ steps.context.outputs.expectation }}
+      trigger: ${{ steps.context.outputs.trigger }}
     steps:
-      - name: Checkout PR Commit
+      - name: Checkout trusted workflow control
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Set Pipeline Variables
-        id: vars
-        env:
-          PR_NUM: ${{ github.event.pull_request.number || inputs.pr_number || '1' }}
-          COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: |
-          SHORT="${COMMIT:0:7}"
-          REPO_LOWER=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
-          TAG_PR="ghcr.io/${REPO_LOWER}:pr-${PR_NUM}"
-          TAG_SHA="ghcr.io/${REPO_LOWER}:${COMMIT}"
-          TAG_PR_SHA="ghcr.io/${REPO_LOWER}:pr-${PR_NUM}-${SHORT}"
-          
-          echo "pr_number=${PR_NUM}" >> "$GITHUB_OUTPUT"
-          echo "commit_sha=${COMMIT}" >> "$GITHUB_OUTPUT"
-          echo "short_sha=${SHORT}" >> "$GITHUB_OUTPUT"
-          echo "repo_lower=${REPO_LOWER}" >> "$GITHUB_OUTPUT"
-          echo "primary_image_tag=${TAG_PR_SHA}" >> "$GITHUB_OUTPUT"
-          echo "tag_pr=${TAG_PR}" >> "$GITHUB_OUTPUT"
-          echo "tag_sha=${TAG_SHA}" >> "$GITHUB_OUTPUT"
-          echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+          ref: ${{ github.workflow_sha }}
+          path: control
+          persist-credentials: false
+      - name: Resolve API context before scheduling credentials
+        id: context
+        uses: actions/github-script@v7
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          script: |
+            try {
+              await require('./control/.github/scripts/preview-context.cjs').resolve({ github, context, core });
+            } catch {
+              core.setFailed('Preview context resolution failed: validate PR, repository, actor permissions and API availability.');
+            }
 
-      - name: Install Dependencies
+  preview:
+    name: Validate, Publish, Deploy and Report
+    needs: resolve
+    if: needs.resolve.outputs.operation == 'preview' && needs.resolve.outputs.disposition != 'skip'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+      issues: write
+      pull-requests: write
+      statuses: write
+    # Serialization only: GitHub concurrency is not a durable ordered queue.
+    concurrency:
+      group: cdd-preview-pr-${{ needs.resolve.outputs.pr_number }}
+      cancel-in-progress: false
+    env:
+      PR_NUMBER: ${{ needs.resolve.outputs.pr_number }}
+      COMMIT_SHA: ${{ needs.resolve.outputs.commit_sha }}
+      IMAGE_REF: ${{ needs.resolve.outputs.image }}
+      POLICY_TRIGGER: ci
+    steps:
+      - name: Checkout trusted workflow control
+        id: control
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: control
+          persist-credentials: false
+      - name: Recheck lifecycle after acquiring mutation lock
+        id: start
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await require('./control/.github/scripts/preview-context.cjs').guard({ github, context, core });
+            } catch { core.setFailed('Locked preview context check failed.'); }
+      - name: Test trusted lifecycle policy
+        if: steps.start.outputs.action == 'deploy'
+        run: node --test control/.github/scripts/preview-policy.test.cjs
+      - name: Checkout resolved application revision
+        if: steps.start.outputs.action == 'deploy'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.resolve.outputs.repository }}
+          ref: ${{ needs.resolve.outputs.commit_sha }}
+          path: application
+          persist-credentials: false
+      - name: Install locked dependencies and verify application in isolation
+        if: steps.start.outputs.action == 'deploy'
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt pytest flake8
-
-      - name: Lint and Validate Syntax
+          # PR dependencies/tests receive only a read-only application mount.
+          # Do not expose control/, Docker sockets, runner command files or tokens.
+          command_token="$(openssl rand -hex 32)"
+          printf '::stop-commands::%s\n' "$command_token"
+          trap 'printf "::%s::\n" "$command_token"' EXIT
+          docker run --rm \
+            --mount "type=bind,source=${GITHUB_WORKSPACE}/application,target=/source,readonly" \
+            --workdir /work \
+            --env PYTHONPATH=. \
+            python:3.11-slim@sha256:07d4824036af339fa1b6ef769cc99d9c10a141769538b52b3b597c84f7a7b535 \
+            bash -euc '
+              apt-get update
+              apt-get install -y --no-install-recommends curl
+              ln -s /usr/local/bin/python3 /usr/bin/python3
+              cp -a /source/. /work/
+              python -m pip install -r requirements.txt
+              python -m py_compile app.py
+              flake8 app.py tests
+              pytest -v
+            '
+      - name: Derive revision tags and build time
+        id: tags
+        if: steps.start.outputs.action == 'deploy'
         run: |
-          python -m py_compile app.py
-          flake8 app.py tests
-
-      - name: Run Unit Tests
-        env:
-          PYTHONPATH: .
-        run: |
-          pytest -v
-
+          repo_lower="${GITHUB_REPOSITORY,,}"
+          echo "tag_pr=ghcr.io/${repo_lower}:pr-${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "tag_sha=ghcr.io/${repo_lower}:${COMMIT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
       - name: Set up Docker Buildx
+        if: steps.start.outputs.action == 'deploy'
         uses: docker/setup-buildx-action@v3
-
+      - name: Build locally loadable production image
+        id: build
+        if: steps.start.outputs.action == 'deploy'
+        uses: docker/build-push-action@v6
+        with:
+          context: application
+          load: true
+          push: false
+          tags: |
+            ${{ needs.resolve.outputs.image }}
+            ${{ steps.tags.outputs.tag_pr }}
+            ${{ steps.tags.outputs.tag_sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.resolve.outputs.commit_sha }}
+            org.opencontainers.image.title=cdd-project-pr-${{ needs.resolve.outputs.pr_number }}
+          build-args: |
+            PR_NUMBER=${{ needs.resolve.outputs.pr_number }}
+            COMMIT_SHA=${{ needs.resolve.outputs.commit_sha }}
+            BRANCH=${{ needs.resolve.outputs.head_ref }}
+            BUILD_TIME=${{ steps.tags.outputs.build_time }}
+            RUN_URL=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            REPO_URL=${{ github.server_url }}/${{ github.repository }}
+            IMAGE_TAG=${{ needs.resolve.outputs.image }}
+      - name: Smoke test unmodified production image within 60 seconds
+        id: smoke
+        if: steps.start.outputs.action == 'deploy'
+        run: |
+          container="cdd-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          docker run -d --name "$container" -p 127.0.0.1::8080 "$IMAGE_REF" >/dev/null
+          port="$(docker port "$container" 8080/tcp)"
+          deadline=$((SECONDS + 60))
+          while (( SECONDS < deadline )); do
+            remaining=$((deadline - SECONDS))
+            attempt_timeout=$((remaining < 3 ? remaining : 3))
+            if curl --fail --silent --output /dev/null --connect-timeout "$attempt_timeout" --max-time "$attempt_timeout" "http://${port}/"; then
+              exit 0
+            fi
+            if (( SECONDS < deadline )); then sleep 1; fi
+          done
+          docker logs "$container"
+          echo 'Production image HTTP smoke failed.' >&2
+          exit 1
       - name: Log in to GitHub Container Registry
+        if: steps.start.outputs.action == 'deploy' && steps.smoke.outcome == 'success'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and Push Docker Image
-        uses: docker/build-push-action@v5
+      - name: Recheck immediately before image publication
+        id: prepush
+        if: always() && steps.start.outcome == 'success'
+        uses: actions/github-script@v7
         with:
-          context: .
-          push: true
-          tags: |
-            ghcr.io/${{ steps.vars.outputs.repo_lower }}:pr-${{ steps.vars.outputs.pr_number }}
-            ghcr.io/${{ steps.vars.outputs.repo_lower }}:${{ steps.vars.outputs.commit_sha }}
-            ghcr.io/${{ steps.vars.outputs.repo_lower }}:pr-${{ steps.vars.outputs.pr_number }}-${{ steps.vars.outputs.short_sha }}
-          labels: |
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ steps.vars.outputs.commit_sha }}
-            org.opencontainers.image.title=cdd-project-pr-${{ steps.vars.outputs.pr_number }}
-          # Shown on the preview page itself (see Dockerfile ARGs and app.py).
-          build-args: |
-            PR_NUMBER=${{ steps.vars.outputs.pr_number }}
-            COMMIT_SHA=${{ steps.vars.outputs.commit_sha }}
-            BRANCH=${{ github.event.pull_request.head.ref || github.ref_name }}
-            BUILD_TIME=${{ steps.vars.outputs.build_time }}
-            RUN_URL=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-            REPO_URL=${{ github.server_url }}/${{ github.repository }}
-            IMAGE_TAG=${{ steps.vars.outputs.primary_image_tag }}
-
-  deploy-preview-and-status:
-    name: Deploy Preview and Report Status
-    needs: validate-and-build
-    if: always()
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Checkout PR Commit
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Resolve Context Variables
-        id: ctx
+          script: |
+            try {
+              await require('./control/.github/scripts/preview-context.cjs').guard({ github, context, core });
+            } catch { core.setFailed('Pre-publication preview context check failed.'); }
+      - name: Publish tested image under all existing tags
+        id: push
+        if: steps.prepush.outputs.action == 'deploy' && steps.smoke.outcome == 'success'
         env:
-          PR_NUM: ${{ needs.validate-and-build.outputs.pr_number || github.event.pull_request.number || inputs.pr_number || '1' }}
-          COMMIT: ${{ needs.validate-and-build.outputs.commit_sha || github.event.pull_request.head.sha || github.sha }}
-          IMAGE_TAG: ${{ needs.validate-and-build.outputs.primary_image_tag }}
+          TAG_PR: ${{ steps.tags.outputs.tag_pr }}
+          TAG_SHA: ${{ steps.tags.outputs.tag_sha }}
         run: |
-          SHORT="${COMMIT:0:7}"
-          REPO_LOWER=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
-          if [[ -z "${IMAGE_TAG}" ]]; then
-            IMAGE_TAG="ghcr.io/${REPO_LOWER}:pr-${PR_NUM}-${SHORT}"
-          fi
-          
-          echo "pr_number=${PR_NUM}" >> "$GITHUB_OUTPUT"
-          echo "commit_sha=${COMMIT}" >> "$GITHUB_OUTPUT"
-          echo "short_sha=${SHORT}" >> "$GITHUB_OUTPUT"
-          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
-
-      - name: Execute Deployment Script
+          docker push "$IMAGE_REF"
+          docker push "$TAG_PR"
+          docker push "$TAG_SHA"
+      - name: Recheck immediately before ACI deployment
+        id: predeploy
+        if: always() && steps.prepush.outcome == 'success'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await require('./control/.github/scripts/preview-context.cjs').guard({ github, context, core });
+            } catch { core.setFailed('Pre-deployment preview context check failed.'); }
+      - name: Deploy resolved revision with trusted control script
         id: deploy
-        if: needs.validate-and-build.result == 'success'
+        if: steps.predeploy.outputs.action == 'deploy' && steps.push.outcome == 'success'
         env:
-          PR_NUMBER: ${{ steps.ctx.outputs.pr_number }}
-          IMAGE_REF: ${{ steps.ctx.outputs.image_tag }}
-          CONTAINER_PORT: 8080
-          RESOURCE_NAME: preview-pr-${{ steps.ctx.outputs.pr_number }}
+          CONTAINER_PORT: '8080'
           AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
           AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP || 'cdd-preview-rg' }}
           PREVIEW_DNS_PREFIX: ${{ vars.PREVIEW_DNS_PREFIX }}
           REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
           REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
-        run: |
-          chmod +x scripts/deploy-preview.sh
-          ./scripts/deploy-preview.sh
-
-      - name: Determine Aggregate Status
-        id: status_summary
-        if: always()
-        env:
-          BUILD_RES: ${{ needs.validate-and-build.result }}
-          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
-          DEPLOY_STAT: ${{ steps.deploy.outputs.status || 'failure' }}
-          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
-          ERR_MSG: ${{ steps.deploy.outputs.error_message }}
-        run: |
-
-          if [[ "$BUILD_RES" != "success" ]]; then
-            DEPLOY_STAT="failure"
-            ERR_MSG="Application tests or Docker build failed during validation job."
-          elif [[ "$DEPLOY_OUTCOME" != "success" || "$DEPLOY_STAT" != "success" ]]; then
-            DEPLOY_STAT="failure"
-            ERR_MSG="${ERR_MSG:-Preview deployment did not complete successfully.}"
-          fi
-
-          if [[ "$DEPLOY_STAT" != "success" ]]; then
-            PREVIEW_URL=""
-          fi
-
-          echo "final_deploy_status=${DEPLOY_STAT}" >> "$GITHUB_OUTPUT"
-          echo "preview_url=${PREVIEW_URL}" >> "$GITHUB_OUTPUT"
-          echo "error_message=${ERR_MSG}" >> "$GITHUB_OUTPUT"
-
-      - name: Update PR Comment and Commit Status Check
-        if: always()
+        run: bash control/scripts/deploy-preview.sh
+      - name: Recheck and publish current revision status and shared comment
+        id: report
+        if: always() && steps.predeploy.outcome == 'success'
         uses: actions/github-script@v7
         env:
-          PR_NUMBER: ${{ steps.ctx.outputs.pr_number }}
-          COMMIT_SHA: ${{ steps.ctx.outputs.commit_sha }}
-          SHORT_SHA: ${{ steps.ctx.outputs.short_sha }}
-          IMAGE_TAG: ${{ steps.ctx.outputs.image_tag }}
-          BUILD_RESULT: ${{ needs.validate-and-build.result }}
-          DEPLOY_STATUS: ${{ steps.status_summary.outputs.final_deploy_status }}
-          PREVIEW_URL: ${{ steps.status_summary.outputs.preview_url }}
-          ERROR_MESSAGE: ${{ steps.status_summary.outputs.error_message }}
+          IMAGE_READY: ${{ steps.smoke.outcome == 'success' && steps.push.outcome == 'success' }}
+          DEPLOY_STATUS: ${{ steps.deploy.outputs.status }}
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const prNumber = process.env.PR_NUMBER;
-            const commitSha = process.env.COMMIT_SHA;
-            const shortSha = process.env.SHORT_SHA;
-            const imageTag = process.env.IMAGE_TAG;
-            const buildResult = process.env.BUILD_RESULT;
-            const deployStatus = process.env.DEPLOY_STATUS;
-            const previewUrl = process.env.PREVIEW_URL;
-            const errorMessage = process.env.ERROR_MESSAGE;
-            const isBuildPassed = buildResult === 'success';
-            let previewBadge = '🔴 Failed';
-            let commitState = 'failure';
-            let commitDesc = 'Preview deployment failed';
-            
-            if (isBuildPassed) {
-              if (deployStatus === 'success') {
-                previewBadge = '🟢 Ready';
-                commitState = 'success';
-                commitDesc = 'Preview environment is live';
-              } else {
-                previewBadge = '🔴 Deployment Failed';
-                commitState = 'failure';
-                commitDesc = 'Deployment script failed';
-              }
-            } else {
-              commitState = 'failure';
-              commitDesc = 'Build or tests failed';
-            }
-
-            const urlDisplay = previewUrl ? `[${previewUrl}](${previewUrl})` : '_None_';
-            const buildBadge = isBuildPassed ? '✅ Passed' : '❌ Failed';
-            const errorSection = errorMessage 
-              ? `\n<details>\n<summary>⚠️ Diagnostic Details</summary>\n\n\`\`\`\n${errorMessage}\n\`\`\`\n</details>` 
-              : '';
-
-            const commentMarker = '<!-- cdd-pr-preview-status -->';
-            const commentBody = `${commentMarker}
-            ## 🚀 PR Preview Deployment Status
-
-            | Metric | Status | Details |
-            | :--- | :--- | :--- |
-            | **PR Revision** | \`#${prNumber}\` | Commit \`${shortSha}\` |
-            | **Build & Test** | ${buildBadge} | Python 3.11, Pytest, Flake8 |
-            | **Docker Image** | ${isBuildPassed ? 'Published' : 'Not published'} | \`${imageTag}\` |
-            | **Preview Environment** | ${previewBadge} | ${urlDisplay} |
-
-            *Deployment automated by Member 2 CI Pipeline. Comments update in-place per PR revision.*
-            ${errorSection}`.replace(/^[ ]{12}/gm, '');
-
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-
-            // Update or create PR comment if PR number is available
-            if (prNumber) {
-              try {
-                const issueNumber = parseInt(prNumber, 10);
-                const { data: comments } = await github.rest.issues.listComments({
-                  owner,
-                  repo,
-                  issue_number: issueNumber
-                });
-                
-                const existing = comments.find(c => c.body && c.body.includes(commentMarker));
-                if (existing) {
-                  await github.rest.issues.updateComment({
-                    owner,
-                    repo,
-                    comment_id: existing.id,
-                    body: commentBody
-                  });
-                  console.log(`Updated existing PR status comment ID ${existing.id}`);
-                } else {
-                  await github.rest.issues.createComment({
-                    owner,
-                    repo,
-                    issue_number: issueNumber,
-                    body: commentBody
-                  });
-                  console.log(`Created new PR status comment on PR #${issueNumber}`);
-                }
-              } catch (err) {
-                console.warn(`Could not update PR comment (may not be an open PR in testing): ${err.message}`);
-              }
-            }
-
-            // Update commit status check
             try {
-              await github.rest.repos.createCommitStatus({
-                owner,
-                repo,
-                sha: commitSha,
-                state: commitState,
-                target_url: previewUrl || undefined,
-                description: commitDesc,
-                context: 'PR Preview Deployment'
-              });
-              console.log(`Updated commit status check for ${commitSha} to ${commitState}`);
-            } catch (err) {
-              console.warn(`Could not update commit status: ${err.message}`);
-            }
-
-      - name: Enforce Pipeline Exit Status
-        if: always() && (needs.validate-and-build.result != 'success' || steps.deploy.outcome != 'success' || steps.status_summary.outputs.final_deploy_status != 'success')
+              await require('./control/.github/scripts/preview-report.cjs').preview({ github, context, core });
+            } catch { core.setFailed('Current preview reporting failed safely; no unverified report was published.'); }
+      - name: Reconcile a PR observed closed by this CI run
+        id: cleanup
+        if: always() && steps.report.outputs.action == 'cleanup'
+        env:
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+          AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP || 'cdd-preview-rg' }}
+          PREVIEW_DNS_PREFIX: ${{ vars.PREVIEW_DNS_PREFIX }}
+        run: bash control/scripts/cleanup-preview.sh
+      - name: Publish reconciled cleanup result
+        if: always() && steps.cleanup.outcome != 'skipped'
+        uses: actions/github-script@v7
+        env:
+          POLICY_TRIGGER: close
+          CLEANUP_STATUS: ${{ steps.cleanup.outputs.status }}
+          CLEANUP_RESULT: ${{ steps.cleanup.outputs.result }}
+          CLEANUP_OUTCOME: ${{ steps.cleanup.outcome }}
+        with:
+          script: |
+            try {
+              await require('./control/.github/scripts/preview-report.cjs').cleanup({ github, context, core });
+            } catch { core.setFailed('Cleanup reporting failed safely.'); }
+      - name: Upload declared sanitized deployment evidence
+        if: always() && steps.deploy.outputs.evidence_path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-deploy-${{ needs.resolve.outputs.pr_number }}-${{ github.run_attempt }}
+          path: ${{ steps.deploy.outputs.evidence_path }}
+          if-no-files-found: error
+      - name: Upload declared sanitized reconciliation evidence
+        if: always() && steps.cleanup.outputs.evidence_path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-reconcile-${{ needs.resolve.outputs.pr_number }}-${{ github.run_attempt }}
+          path: ${{ steps.cleanup.outputs.evidence_path }}
+          if-no-files-found: error
+      - name: Summarize declared cloud evidence
+        if: always()
+        env:
+          DEPLOY_EVIDENCE: ${{ steps.deploy.outputs.evidence_path }}
+          CLEANUP_EVIDENCE: ${{ steps.cleanup.outputs.evidence_path }}
         run: |
-          echo "Pipeline encountered a failure during validation or deployment." >&2
+          for evidence in "$DEPLOY_EVIDENCE" "$CLEANUP_EVIDENCE"; do
+            if [[ -n "$evidence" && -f "$evidence" ]]; then
+              printf '\n### Sanitized cloud evidence\n```json\n' >> "$GITHUB_STEP_SUMMARY"
+              cat "$evidence" >> "$GITHUB_STEP_SUMMARY"
+              printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+      - name: Enforce current revision deployment result
+        if: always() && steps.report.outputs.action == 'deploy' && (steps.push.outcome != 'success' || steps.deploy.outcome != 'success' || steps.deploy.outputs.status != 'success')
+        run: |
+          echo 'Current revision validation, image publication or deployment failed.' >&2
           exit 1
+
+  cleanup:
+    name: Candidate Cleanup Operation
+    needs: resolve
+    if: needs.resolve.outputs.operation == 'cleanup' && needs.resolve.outputs.disposition == 'cleanup'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    concurrency:
+      group: cdd-preview-pr-${{ needs.resolve.outputs.pr_number }}
+      cancel-in-progress: false
+    env:
+      PR_NUMBER: ${{ needs.resolve.outputs.pr_number }}
+      COMMIT_SHA: ${{ needs.resolve.outputs.commit_sha }}
+      POLICY_TRIGGER: ${{ needs.resolve.outputs.trigger }}
+    steps:
+      - name: Checkout selected trusted candidate workflow
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: control
+          persist-credentials: false
+      - name: Recheck cleanup intent inside mutation lock
+        id: gate
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await require('./control/.github/scripts/preview-context.cjs').guard({ github, context, core });
+            } catch { core.setFailed('Locked cleanup context check failed.'); }
+      - name: Execute ownership-verified cleanup
+        id: cleanup
+        if: steps.gate.outputs.action == 'cleanup'
+        env:
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+          AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP || 'cdd-preview-rg' }}
+          PREVIEW_DNS_PREFIX: ${{ vars.PREVIEW_DNS_PREFIX }}
+        run: bash control/scripts/cleanup-preview.sh
+      - name: Report cleanup without hiding publication failures
+        if: always() && steps.gate.outputs.action == 'cleanup'
+        uses: actions/github-script@v7
+        env:
+          CLEANUP_STATUS: ${{ steps.cleanup.outputs.status }}
+          CLEANUP_RESULT: ${{ steps.cleanup.outputs.result }}
+          CLEANUP_OUTCOME: ${{ steps.cleanup.outcome }}
+        with:
+          script: |
+            try {
+              await require('./control/.github/scripts/preview-report.cjs').cleanup({ github, context, core });
+            } catch { core.setFailed('Cleanup reporting failed safely.'); }
+      - name: Upload declared sanitized cleanup evidence
+        if: always() && steps.cleanup.outputs.evidence_path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-cleanup-${{ needs.resolve.outputs.pr_number }}-${{ github.run_attempt }}
+          path: ${{ steps.cleanup.outputs.evidence_path }}
+          if-no-files-found: error
+      - name: Summarize declared cleanup evidence
+        if: always()
+        env:
+          EVIDENCE_PATH: ${{ steps.cleanup.outputs.evidence_path }}
+        run: |
+          if [[ -n "$EVIDENCE_PATH" && -f "$EVIDENCE_PATH" ]]; then
+            printf '### Sanitized cleanup evidence\n```json\n' >> "$GITHUB_STEP_SUMMARY"
+            cat "$EVIDENCE_PATH" >> "$GITHUB_STEP_SUMMARY"
+            printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  verify:
+    name: Read-Only Two-PR Acceptance
+    needs: resolve
+    if: needs.resolve.outputs.operation == 'verify'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout selected trusted verifier
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: control
+          persist-credentials: false
+      - name: Verify observed owned resources and public HTTP
+        id: verify
+        env:
+          PR_A: ${{ needs.resolve.outputs.pr_number }}
+          PR_B: ${{ needs.resolve.outputs.peer_pr_number }}
+          EXPECTED_IMAGE_A: ${{ needs.resolve.outputs.image }}
+          EXPECTED_IMAGE_B: ${{ needs.resolve.outputs.peer_image }}
+          EXPECTATION: ${{ needs.resolve.outputs.expectation }}
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+          AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP || 'cdd-preview-rg' }}
+          PREVIEW_DNS_PREFIX: ${{ vars.PREVIEW_DNS_PREFIX }}
+        run: python3 control/scripts/verify-previews.py
+      - name: Upload declared sanitized verification evidence
+        if: always() && steps.verify.outputs.evidence_path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-verify-${{ needs.resolve.outputs.pr_number }}-${{ needs.resolve.outputs.peer_pr_number }}-${{ github.run_attempt }}
+          path: ${{ steps.verify.outputs.evidence_path }}
+          if-no-files-found: error
+      - name: Upload committed nonsecret acceptance screenshots and HTTP captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-captures-${{ github.run_id }}-${{ github.run_attempt }}
+          path: control/docs/evidence/
+          if-no-files-found: ignore
+      - name: Summarize declared verification evidence
+        if: always()
+        env:
+          EVIDENCE_PATH: ${{ steps.verify.outputs.evidence_path }}
+        run: |
+          if [[ -n "$EVIDENCE_PATH" && -f "$EVIDENCE_PATH" ]]; then
+            printf '### Sanitized read-only verification evidence\n```json\n' >> "$GITHUB_STEP_SUMMARY"
+            cat "$EVIDENCE_PATH" >> "$GITHUB_STEP_SUMMARY"
+            printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+          fi

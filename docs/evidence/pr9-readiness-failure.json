@@ -1,0 +1,33 @@
+{
+  "operation": "deploy",
+  "records": [
+    {
+      "pr_number": "9",
+      "resource_name": "preview-pr-9",
+      "present": true,
+      "image": "ghcr.io/prabalpratapsinghmer/cdd-project:pr-9-7e7e869",
+      "tags": {
+        "managed-by": "cdd-preview",
+        "pr-number": "9",
+        "preview-owner": "pratham-cdd-preview"
+      },
+      "provisioning_state": "Succeeded",
+      "fqdn": "pratham-cdd-preview-preview-pr-9.d8gefzhjbnffg4h7.koreacentral.azurecontainer.io",
+      "ip": "20.249.49.168",
+      "http": {
+        "success": false,
+        "method": "ip-resolve",
+        "curl_exit": 22,
+        "status_code": 503
+      },
+      "deletion_requested": null,
+      "verified_absent": null,
+      "status": "failure",
+      "result": null,
+      "error": "Preview HTTP readiness failed; check application startup, PORT binding, ACI container logs and public network reachability."
+    }
+  ],
+  "quota": null,
+  "status": "failure",
+  "error": "Preview HTTP readiness failed; check application startup, PORT binding, ACI container logs and public network reachability."
+}

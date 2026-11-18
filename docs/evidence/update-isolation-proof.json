@@ -1,0 +1,151 @@
+{
+  "before": {
+    "operation": "verify",
+    "records": [
+      {
+        "pr_number": "8",
+        "resource_name": "preview-pr-8",
+        "present": true,
+        "image": "ghcr.io/prabalpratapsinghmer/cdd-project:pr-8-92eeadc",
+        "tags": {
+          "managed-by": "cdd-preview",
+          "pr-number": "8",
+          "preview-owner": "pratham-cdd-preview"
+        },
+        "provisioning_state": "Succeeded",
+        "fqdn": "pratham-cdd-preview-preview-pr-8.bfaqbqdjgwbnbad4.koreacentral.azurecontainer.io",
+        "ip": "20.214.80.112",
+        "http": {
+          "success": true,
+          "curl_exit": 0,
+          "status_code": 200,
+          "method": "public-dns"
+        },
+        "deletion_requested": null,
+        "verified_absent": null,
+        "status": "success",
+        "result": null,
+        "error": null
+      },
+      {
+        "pr_number": "9",
+        "resource_name": "preview-pr-9",
+        "present": true,
+        "image": "ghcr.io/prabalpratapsinghmer/cdd-project:pr-9-72f9a97",
+        "tags": {
+          "managed-by": "cdd-preview",
+          "pr-number": "9",
+          "preview-owner": "pratham-cdd-preview"
+        },
+        "provisioning_state": "Succeeded",
+        "fqdn": "pratham-cdd-preview-preview-pr-9.d8gefzhjbnffg4h7.koreacentral.azurecontainer.io",
+        "ip": "20.249.49.168",
+        "http": {
+          "success": true,
+          "curl_exit": 0,
+          "status_code": 200,
+          "method": "public-dns"
+        },
+        "deletion_requested": null,
+        "verified_absent": null,
+        "status": "success",
+        "result": null,
+        "error": null
+      }
+    ],
+    "quota": {
+      "status": "unavailable",
+      "limits": null
+    },
+    "status": "success",
+    "error": null
+  },
+  "after": {
+    "operation": "verify",
+    "records": [
+      {
+        "pr_number": "8",
+        "resource_name": "preview-pr-8",
+        "present": true,
+        "image": "ghcr.io/prabalpratapsinghmer/cdd-project:pr-8-823f953",
+        "tags": {
+          "managed-by": "cdd-preview",
+          "pr-number": "8",
+          "preview-owner": "pratham-cdd-preview"
+        },
+        "provisioning_state": "Succeeded",
+        "fqdn": "pratham-cdd-preview-preview-pr-8.bfaqbqdjgwbnbad4.koreacentral.azurecontainer.io",
+        "ip": "20.214.80.112",
+        "http": {
+          "success": true,
+          "curl_exit": 0,
+          "status_code": 200,
+          "method": "public-dns"
+        },
+        "deletion_requested": null,
+        "verified_absent": null,
+        "status": "success",
+        "result": null,
+        "error": null
+      },
+      {
+        "pr_number": "9",
+        "resource_name": "preview-pr-9",
+        "present": true,
+        "image": "ghcr.io/prabalpratapsinghmer/cdd-project:pr-9-72f9a97",
+        "tags": {
+          "managed-by": "cdd-preview",
+          "pr-number": "9",
+          "preview-owner": "pratham-cdd-preview"
+        },
+        "provisioning_state": "Succeeded",
+        "fqdn": "pratham-cdd-preview-preview-pr-9.d8gefzhjbnffg4h7.koreacentral.azurecontainer.io",
+        "ip": "20.249.49.168",
+        "http": {
+          "success": true,
+          "curl_exit": 0,
+          "status_code": 200,
+          "method": "public-dns"
+        },
+        "deletion_requested": null,
+        "verified_absent": null,
+        "status": "success",
+        "result": null,
+        "error": null
+      }
+    ],
+    "quota": {
+      "status": "unavailable",
+      "limits": null
+    },
+    "status": "success",
+    "error": null
+  },
+  "a_api": {
+    "branch": "completion/cdd-acceptance-20261117T161744Z",
+    "build_time": "2026-11-17T17:12:18Z",
+    "commit_sha": "823f9530c3aca285edb3320944fbd44dfddb6bc9",
+    "hostname": "SandboxHost-639305323735399485",
+    "image_tag": "ghcr.io/prabalpratapsinghmer/cdd-project:pr-8-823f953",
+    "pr_number": "8",
+    "repo_url": "https://github.com/prabalpratapsinghmer/CDD-project",
+    "run_url": "https://github.com/prabalpratapsinghmer/CDD-project/actions/runs/44134165854",
+    "started_at": "2026-11-17T17:14:31.425832+00:00",
+    "uptime_seconds": 91
+  },
+  "b_api": {
+    "branch": "acceptance/disposable-b-20261117",
+    "build_time": "2026-11-17T16:45:12Z",
+    "commit_sha": "72f9a97506354ab0f12feca857a53e8faceb6270",
+    "hostname": "SandboxHost-639305307568880529",
+    "image_tag": "ghcr.io/prabalpratapsinghmer/cdd-project:pr-9-72f9a97",
+    "pr_number": "9",
+    "repo_url": "https://github.com/prabalpratapsinghmer/CDD-project",
+    "run_url": "https://github.com/prabalpratapsinghmer/CDD-project/actions/runs/44129113807",
+    "started_at": "2026-11-17T16:46:17.972028+00:00",
+    "uptime_seconds": 1784
+  },
+  "stable_comment_id": 6954885487,
+  "comment_url": "https://github.com/prabalpratapsinghmer/CDD-project/pull/8#issuecomment-6954885487",
+  "comment_body": "<!-- cdd-pr-preview-status -->\n## PR Preview Deployment Status\n\n| Metric | Details |\n| :--- | :--- |\n| PR revision | #8, commit `823f9530c3aca285edb3320944fbd44dfddb6bc9` |\n| Build and image smoke | Passed |\n| Docker image | `ghcr.io/prabalpratapsinghmer/cdd-project:pr-8-823f953` |\n| Preview | \ud83d\udfe2 Ready \u2014 [http://pratham-cdd-preview-preview-pr-8.bfaqbqdjgwbnbad4.koreacentral.azurecontainer.io:8080](http://pratham-cdd-preview-preview-pr-8.bfaqbqdjgwbnbad4.koreacentral.azurecontainer.io:8080) |\n\n[Workflow run](https://github.com/prabalpratapsinghmer/CDD-project/actions/runs/44134165854)\n"
+}

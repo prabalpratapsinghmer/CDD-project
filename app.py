@@ -1,4 +1,3 @@
-import hashlib
 import os
 import socket
 from datetime import datetime, timezone
@@ -32,28 +31,10 @@ def build_info():
     }
 
 
-def accent_hue(pr_number):
-    """Golden-angle steps keep consecutive PRs far apart on the colour wheel,
-    so side-by-side previews are easy to tell apart."""
-    if not pr_number.isdigit():
-        return 262
-    return round(int(pr_number) * 137.508) % 360
-
-
-def fingerprint(commit_sha):
-    """20 bar hues derived from the commit, so every push looks different."""
-    digest = hashlib.sha1(commit_sha.encode()).hexdigest()
-    return [int(digest[i:i + 2], 16) * 360 // 256 for i in range(0, 40, 2)]
-
-
 @app.route('/')
 def home():
     info = build_info()
-    bars = fingerprint(info['commit_sha'])
-    return render_template(
-        'index.html', info=info, hue=accent_hue(info['pr_number']), bars=bars,
-        from_ci=bool(info['pr_number'] and info['commit_sha']),
-    )
+    return render_template('dashboard.html', info=info)
 
 
 @app.route('/api/info')
