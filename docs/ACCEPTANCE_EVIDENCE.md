@@ -1,5 +1,7 @@
 # CDD completion acceptance evidence
 
+> **Status (2026-11-18):** PRs #8 and #10 have since been merged to `main`, so passages below that call the candidate "unmerged" or name `b60a1cec` as installed main describe the situation when they were captured. The terminal cleanup and strict both-absent evidence for PRs #8/#9 is in the reserved acceptance comment linked below (cleanup run 44213089612, verification run 44213211514). Independent post-merge observations on 2026-11-18: closing PR #7 unmerged deleted `preview-pr-7` and commented on the PR ([cleanup run 44229137269](https://github.com/prabalpratapsinghmer/CDD-project/actions/runs/44229137269)), and a read-only `verify` with `expectation=both-absent` for PRs #6 and #7 succeeded ([run 44229364852](https://github.com/prabalpratapsinghmer/CDD-project/actions/runs/44229364852); sanitized record `docs/evidence/post-merge-both-absent-pr6-pr7.json`).
+
 ## Scope and evidence boundary
 
 This record covers the unmerged completion candidate in [implementation PR A #8](https://github.com/prabalpratapsinghmer/CDD-project/pull/8), branch `completion/cdd-acceptance-20261117T161744Z`, and disposable [PR B #9](https://github.com/prabalpratapsinghmer/CDD-project/pull/9), closed unmerged. The original `CDD-project` worktree is preserved; integration uses `CDD-completion`.
