@@ -3,227 +3,185 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#090D16">
+<meta name="theme-color" content="#090b12">
 <title>{% if info.pr_number and info.commit_sha %}PR #{{ info.pr_number }} · {% endif %}CDD Project — PR Preview Environment</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath fill='%2367E8F9' d='M10 0h30v30L30 40H0V10z'/%3E%3Cpath d='M27 12a11 11 0 1 0 0 16' fill='none' stroke='%23090D16' stroke-width='5'/%3E%3C/svg%3E">
 <style>
-/* Design system and responsive shell */
-:root{color-scheme:dark;--bg:#090D16;--surface:#111827;--raised:#182235;--border:#2A3850;--text:#F2F5FC;--muted:#B3C0D5;--violet:#A78BFA;--cyan:#67E8F9;--amber:#FCD34D;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:15px;line-height:1.65}
-*{box-sizing:border-box}html{scroll-behavior:auto}body{margin:0;background:var(--bg);color:var(--text)}a{color:inherit;text-decoration:none}button,input{font:inherit}button,a,input{-webkit-tap-highlight-color:transparent}button{cursor:pointer}button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(--cyan);outline-offset:5px}::selection{background:#6753a1;color:white}h1,h2,h3,p{margin:0}h1,h2,h3{line-height:1.12;letter-spacing:-.045em}h2{font-size:clamp(2rem,4vw,3rem)}h3{font-size:1.15rem;letter-spacing:-.02em}p{color:var(--muted)}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.84em;overflow-wrap:anywhere}button{color:var(--text)}[hidden]{display:none!important}.js-only{display:none!important}.js .js-only{display:inline-flex!important}.skip{position:fixed;top:-100px;left:20px;z-index:100;background:var(--cyan);color:var(--bg);padding:12px 20px}.skip:focus{top:16px}.sidebar{position:fixed;inset:0 auto 0 0;width:232px;border-right:1px solid var(--border);padding:32px 24px;background:var(--bg);z-index:20;display:flex;flex-direction:column}.brand{display:flex;align-items:center;gap:12px}.mark{width:38px;height:42px;display:grid;place-items:center;background:linear-gradient(145deg,var(--violet),var(--cyan));color:var(--bg);font-weight:900;font-size:19px;clip-path:polygon(25% 0,100% 0,100% 75%,75% 100%,0 100%,0 25%)}.brand strong{display:block;font-size:15px;letter-spacing:-.03em}.brand small{display:block;font-size:10px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}.nav{display:grid;gap:8px;margin-top:58px}.nav a{min-height:46px;display:flex;align-items:center;gap:14px;padding:10px 12px;border-radius:9px;color:var(--muted);font-size:13px;transition:background 160ms,color 160ms}.nav a span{font:10px ui-monospace,monospace;color:#74839d}.nav a:hover,.nav a[aria-current]{background:var(--raised);color:var(--text)}.nav a[aria-current] span{color:var(--cyan)}.sidebar-foot{margin-top:auto;border-top:1px solid var(--border);padding-top:20px;font:10px/1.8 ui-monospace,monospace;color:var(--muted)}.sidebar-foot b{color:var(--violet);font-weight:400}.menu-toggle{display:none}.main{margin-left:232px;padding:32px;max-width:1672px}.section{scroll-margin-top:32px;margin-bottom:84px}.eyebrow{font:11px/1.5 ui-monospace,monospace;text-transform:uppercase;letter-spacing:.14em;color:var(--cyan)}.section-head{display:flex;justify-content:space-between;align-items:end;gap:24px;margin-bottom:28px}.section-head .eyebrow{margin-bottom:12px}.section-head>p{max-width:360px;font-size:13px}.section-number{color:var(--violet)}.hero{position:relative;isolation:isolate;overflow:hidden;min-height:530px;border:1px solid var(--border);border-radius:22px;padding:42px;background:radial-gradient(ellipse at 90% 48%,#3b4078 0,transparent 48%),radial-gradient(ellipse at 70% 100%,#126070 0,transparent 58%),var(--surface)}.hero:before{content:"";position:absolute;inset:0;z-index:-1;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%23090d16' fill-opacity='.35' d='M0 0h1v1H0zm2 2h1v1H2z'/%3E%3C/svg%3E");background-size:4px 4px}.hero:after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,rgba(9,13,22,.97),rgba(9,13,22,.75) 44%,rgba(9,13,22,.08));pointer-events:none}.hero canvas{position:absolute;inset:0;width:100%;height:100%;z-index:-2;pointer-events:none}.hero-top{display:flex;justify-content:space-between;gap:20px;margin-bottom:58px}.overview-label{font:10px/1.7 ui-monospace,monospace;color:var(--muted)}.overview-label:before{content:"◇";color:var(--cyan);margin-right:8px}.hero-index{font:11px ui-monospace,monospace;color:var(--muted)}h1{font-size:clamp(2.9rem,5.1vw,5.3rem);font-weight:650;max-width:680px;line-height:1.02}.hero h1 em{font-style:normal;color:var(--cyan)}.hero-copy{max-width:460px;margin-top:24px;font-size:14px}.hero-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:30px}.button{display:inline-flex;min-height:46px;align-items:center;justify-content:center;gap:26px;padding:11px 18px;border:1px solid var(--border);border-radius:7px;background:var(--raised);font-size:12px;font-weight:650;transition:background 160ms,transform 160ms}.button:hover{background:#25344b;transform:translateY(-1px)}.button.primary{background:var(--cyan);border-color:var(--cyan);color:#09131b}.button.primary:hover{background:#a5f3fc}.hero-caption{position:absolute;bottom:32px;right:32px;font:10px/1.8 ui-monospace,monospace;color:#c4d4e5;text-align:right}.capabilities{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:16px}.capability{padding:19px 18px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}.capability span{display:block;font:10px ui-monospace,monospace;color:var(--violet);margin-bottom:10px}.capability strong{font-size:12px;font-weight:550}.card{position:relative;overflow:hidden;border:1px solid var(--border);border-radius:18px;background:var(--surface);padding:26px;transition:border-color 160ms,background 160ms}.card:hover{border-color:#526583}.card:before{content:"";position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity 160ms;background:radial-gradient(300px circle at var(--px,50%) var(--py,0%),#67e8f90b,transparent 75%)}.card:hover:before{opacity:1}.grid-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.subtle{font-size:12px;color:var(--muted)}.pill{display:inline-block;border:1px solid var(--border);border-radius:99px;padding:5px 11px;font:10px ui-monospace,monospace;color:var(--muted)}
-/* Pipeline disclosures and architecture */
-.pipeline-layout{display:grid;grid-template-columns:215px minmax(0,1fr);gap:26px}.pipeline-note{padding:23px 0}.pipeline-note h3{font-size:1.4rem;line-height:1.25;margin:18px 0}.pipeline-note p{font-size:12px}.pipeline-list{list-style:none;padding:0;margin:0;border:1px solid var(--border);border-radius:18px;background:var(--surface);overflow:hidden}.pipeline-list li+li{border-top:1px solid var(--border)}.stage-toggle{display:flex;align-items:center;gap:18px;width:100%;min-height:73px;padding:18px 24px;background:none;border:0;text-align:left}.stage-toggle:hover{background:var(--raised)}.stage-toggle .stage-number{display:grid;place-items:center;flex-shrink:0;width:30px;height:30px;border:1px solid var(--border);border-radius:50%;font:11px ui-monospace,monospace;color:var(--muted)}.stage-toggle strong{font-size:14px;font-weight:550}.stage-toggle .stage-type{margin-left:auto;font:10px ui-monospace,monospace;color:var(--muted)}.stage-toggle .plus{font-size:20px;color:var(--violet);margin-left:10px}.stage-toggle[aria-expanded=true]{background:var(--raised)}.stage-toggle[aria-expanded=true] .stage-number{border-color:var(--cyan);color:var(--cyan)}.stage-panel{padding:4px 24px 25px 72px;font-size:13px}.stage-panel p+p{margin-top:12px}.code-list{display:grid;gap:8px;margin-top:14px}.code-list code{display:block;border-left:2px solid #4c466f;background:#090d1680;padding:9px 12px;color:#d8deef}.flow-card{padding:32px}.flow-label{font:10px ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:22px}.system-flow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px 30px}.flow-node{position:relative;border:1px solid var(--border);border-radius:10px;min-height:108px;padding:18px;background:var(--raised)}.flow-node small{font:10px ui-monospace,monospace;color:var(--violet);display:block;margin-bottom:8px}.flow-node strong{font-size:13px;font-weight:550}.flow-node svg{position:absolute;width:25px;height:14px;right:-29px;top:48px;color:var(--cyan)}.flow-node:nth-child(3) svg{display:none}.flow-node:nth-child(6) svg{display:none}.flow-caption{margin-top:18px;font-size:12px}.serving{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:22px 0;margin-top:24px;border-top:1px solid var(--border);font-size:12px}.serving span{background:#090d16;padding:8px 12px;border-radius:7px;border:1px solid var(--border)}.serving b{color:var(--cyan);font-weight:400}.architecture-notes{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:24px}.architecture-notes h3{margin-bottom:10px}.architecture-notes p{font-size:12px}.lifecycle-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.lifecycle-card{min-height:240px}.lifecycle-card .step{font:42px/1 ui-monospace,monospace;color:#45506c;margin-bottom:26px}.lifecycle-card h3{margin-bottom:14px}.lifecycle-card p{font-size:12px}.serialization{display:flex;gap:24px;align-items:start;margin:20px 0;padding:22px 25px;border:1px solid var(--border);border-radius:12px}.serialization p{font-size:12px}.serialization .eyebrow{min-width:128px}.safety{border-color:#63552d;background:#1c1b1b}.safety h3{color:var(--amber);margin-bottom:15px}.safety ul{margin:0;padding-left:20px;display:grid;grid-template-columns:1fr 1fr;gap:10px 32px;color:var(--muted);font-size:12px}.safety-tags{margin-top:18px;padding-top:18px;border-top:1px solid #4b422d;font-size:12px}.safety-tags code{color:var(--amber)}
-/* Searchable resources and command controls */
-.search-row{display:flex;align-items:end;gap:12px;margin-bottom:14px}.search-field{flex:1}.search-field label{display:block;font-size:12px;margin-bottom:8px}.search-field input{width:100%;height:48px;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--text);padding:0 16px;font-size:13px;min-width:0}.search-field input::placeholder{color:#90a0ba}.results{font:11px ui-monospace,monospace;color:var(--muted);margin-bottom:22px}.resource-card h3{margin-bottom:14px}.resource-card p,.resource-card li{font-size:12px}.resource-card ul{padding-left:18px;color:var(--muted)}.resource-kicker{display:block;font:10px ui-monospace,monospace;color:var(--violet);margin-bottom:14px}.command{display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-top:12px;padding:6px 7px 6px 12px;min-width:0}.command code{flex:1;min-width:0;white-space:pre-wrap;word-break:break-word;color:#dce8f4;font-size:11px}.copy{flex-shrink:0;min-width:44px;min-height:44px;background:var(--raised);border:1px solid var(--border);border-radius:5px;align-items:center;justify-content:center;font-size:10px}.copy:hover{border-color:var(--cyan)}.source-list{display:grid;gap:12px}.source-list dt{font-size:12px}.source-list dd{margin:3px 0 0;color:var(--muted);font-size:12px}.config{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;font-size:11px;margin:14px 0}.config span{color:var(--muted)}.empty{padding:36px;border:1px dashed var(--border);border-radius:12px;color:var(--muted)}.footer{display:flex;justify-content:space-between;gap:20px;border-top:1px solid var(--border);padding:24px 0 10px;font:10px ui-monospace,monospace;color:var(--muted)}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.js .reveal-pending{opacity:0;transform:translateY(14px)}.js .reveal-pending:focus-within{opacity:1;transform:none}.reveal-ready{transition:opacity 360ms,transform 360ms}
-@media(min-width:1100px){.menu-toggle{display:none!important}}
-@media(max-width:1099px){.sidebar{position:sticky;top:0;width:auto;height:auto;display:flex;flex-direction:row;align-items:center;justify-content:space-between;padding:14px 24px;border-right:0;border-bottom:1px solid var(--border)}.sidebar-foot{display:none}.nav{display:flex;gap:2px;margin:0}.nav a{font-size:11px;padding:9px}.nav a span{display:none}.brand small{font-size:8px}.brand strong{font-size:13px}.mark{width:30px;height:34px;font-size:16px}.main{margin:0;padding:24px}.section{scroll-margin-top:100px}.hero{padding:32px}.hero-caption{right:24px;bottom:24px}.hero h1{font-size:4.4rem}.pipeline-layout{grid-template-columns:170px minmax(0,1fr)}}
-@media(min-width:768px){.js .nav[hidden]{display:flex!important}.js .menu-toggle.js-only{display:none!important}}
-@media(max-width:767px){.sidebar{padding:13px 16px;flex-wrap:wrap;gap:12px}.js .menu-toggle{display:inline-flex!important;align-items:center;min-height:44px;padding:8px 12px;border:1px solid var(--border);background:var(--surface);border-radius:7px;font-size:11px}.nav{width:100%;flex-wrap:wrap;gap:4px}.nav a{flex:1 1 30%;justify-content:center;min-height:44px;font-size:11px}.main{padding:16px}.section{margin-bottom:58px;scroll-margin-top:94px}.hero{padding:25px 22px;min-height:570px}.hero-top{margin-bottom:48px}.hero-index{display:none}.overview-label{font-size:9px;max-width:220px}.hero h1{font-size:clamp(2.9rem,12vw,4.2rem)}.hero-copy{font-size:13px}.hero-caption{font-size:8px;bottom:20px;right:20px}.hero:after{background:linear-gradient(90deg,rgba(9,13,22,.94),rgba(9,13,22,.55))}.capabilities{grid-template-columns:1fr;gap:10px}.capability{padding:16px 12px}.capability strong{font-size:11px}.section-head{display:block}.section-head>p{margin-top:16px}.section-head h2{font-size:2.2rem}.pipeline-layout{grid-template-columns:1fr;gap:10px}.pipeline-note{padding:0 0 16px}.pipeline-note h3{margin:10px 0}.stage-toggle{padding:16px;gap:12px}.stage-toggle .stage-type{display:none}.stage-toggle .plus{margin-left:auto}.stage-panel{padding:0 18px 24px 18px}.grid-two,.lifecycle-grid,.architecture-notes{grid-template-columns:1fr}.card{padding:22px}.system-flow{grid-template-columns:1fr;gap:22px}.flow-node{min-height:80px}.flow-node svg{right:22px;top:auto;bottom:-20px;transform:rotate(90deg);width:25px}.flow-node:nth-child(3) svg{display:block}.flow-node:nth-child(6) svg{display:none}.serving{gap:8px;font-size:10px}.serving span{padding:7px 8px}.lifecycle-card{min-height:0}.lifecycle-card .step{font-size:30px;margin-bottom:18px}.serialization{display:block;padding:20px}.serialization .eyebrow{margin-bottom:10px}.safety ul{grid-template-columns:1fr}.search-row{gap:8px}.search-field input{font-size:11px;padding:0 10px}.search-row .button{padding:11px 12px;font-size:11px}.footer{display:block;line-height:2}.config{grid-template-columns:1fr}.config span{margin-top:-7px}.hero-actions{gap:8px}.button{gap:14px;padding:11px 14px}}
-.js .search-row{display:flex!important;width:100%}.js .results{display:block!important}.main,.search-field,.pipeline-layout>*{min-width:0}.stage-toggle:focus-visible{outline-offset:-5px}
-@media(max-width:1099px){html:not(.js) .sidebar{position:static}}
-@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{animation:none!important;transition:none!important}.js .reveal-pending{opacity:1;transform:none}}
-/* Server-rendered provenance remains readable without JavaScript. */
-.revision-panel{margin-top:20px}
-.revision-panel h2{font-size:1.5rem;letter-spacing:-.025em;margin-bottom:14px}
-.revision-panel>p{font-size:13px}
-.revision-details{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:18px 24px;margin:20px 0}
-.revision-details>div{min-width:0}
-.revision-details dt{font-size:12px;color:var(--muted);margin-bottom:5px}
-.revision-details dd{margin:0;overflow-wrap:anywhere}
-.revision-panel a{text-decoration:underline;text-underline-offset:3px}
-.revision-links{display:flex;flex-wrap:wrap;gap:12px 24px;font-size:13px}
+  :root {
+    --h: {{ hue }};
+    --a1: hsl(var(--h) 90% 66%);
+    --a2: hsl(calc(var(--h) + 55) 90% 66%);
+    --bg: #090b12;
+    --card: rgba(255, 255, 255, .05);
+    --line: rgba(255, 255, 255, .13);
+    --text: #eef0f7;
+    --muted: #a8b0c4;
+    --ok: #3ddc97;
+    --warn: #ffc857;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; overflow-x: hidden; color: var(--text); background: var(--bg);
+    font: 17px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
+  }
+  /* The tint: two soft glows whose colour comes from the PR number. */
+  body::before {
+    content: ""; position: fixed; inset: 0; z-index: -1;
+    background:
+      radial-gradient(55vw 45vh at 12% 0%, hsl(var(--h) 90% 55% / .32), transparent 70%),
+      radial-gradient(45vw 40vh at 92% 8%, hsl(calc(var(--h) + 55) 90% 55% / .22), transparent 70%);
+  }
+  a { color: inherit; text-underline-offset: 3px; text-decoration-color: var(--a1); }
+  code { font-family: var(--mono); font-size: .92em; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 22px 0; }
+  .brand { display: flex; align-items: center; gap: 12px; font-weight: 700; }
+  .logo {
+    width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+    background: linear-gradient(135deg, var(--a1), var(--a2)); color: #0a0c14; font: 800 13px var(--mono);
+  }
+  .pill {
+    display: inline-flex; align-items: center; gap: 9px; padding: 7px 14px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--card); font: 600 12px var(--mono);
+    letter-spacing: .08em; text-transform: uppercase;
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); animation: ping 2s infinite; }
+  .pill.local .dot { background: var(--warn); animation: none; }
+
+  .hero { padding: 48px 0 36px; }
+  .eyebrow { color: var(--muted); font: 600 13px var(--mono); letter-spacing: .14em; text-transform: uppercase; margin: 0; }
+  h1 { margin: 14px 0 18px; font-size: clamp(2.6rem, 7vw, 4.8rem); line-height: 1.05; letter-spacing: -.03em; }
+  .grad { background: linear-gradient(95deg, var(--a1), var(--a2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lead { max-width: 620px; margin: 0 0 28px; font-size: 1.25rem; color: var(--muted); }
+  .viewing {
+    display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin: 0 0 18px; padding: 12px 18px;
+    border: 1px solid var(--a1); border-radius: 14px; background: var(--card);
+  }
+  .viewing .label { color: var(--muted); font: 600 12px var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+  .note { display: inline-block; margin: 0; padding: 10px 16px; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn {
+    padding: 11px 20px; border-radius: 12px; border: 1px solid var(--line); background: var(--card);
+    text-decoration: none; font-weight: 600; font-size: 15px; transition: transform .15s, border-color .15s;
+  }
+  .btn:hover { transform: translateY(-2px); border-color: var(--a1); }
+  .btn.primary { background: linear-gradient(135deg, var(--a1), var(--a2)); color: #0a0c14; border-color: transparent; }
+
+  section { padding: 30px 0; }
+  h2 { margin: 0 0 6px; font-size: 1.6rem; letter-spacing: -.01em; }
+  .sub { margin: 0 0 22px; color: var(--muted); }
+
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+  .step {
+    position: relative; padding: 18px 16px; border-radius: 16px; border: 1px solid var(--line); background: var(--card);
+    opacity: 0; transform: translateY(12px); animation: rise .5s ease forwards; animation-delay: calc(var(--i) * 90ms);
+  }
+  .step:not(:last-child)::after { content: ""; position: absolute; top: 34px; right: -15px; width: 16px; height: 2px; background: var(--line); }
+  .n { width: 30px; height: 30px; margin-bottom: 12px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--line); font: 700 13px var(--mono); }
+  .step h3 { margin: 0 0 4px; font-size: 1.05rem; }
+  .step p { margin: 0; font-size: .95rem; line-height: 1.45; color: var(--muted); }
+  .step.here { border-color: var(--a1); box-shadow: 0 14px 44px -16px hsl(var(--h) 90% 55% / .75); }
+  .step.here .n { background: linear-gradient(135deg, var(--a1), var(--a2)); color: #0a0c14; border-color: transparent; }
+  .tag { display: inline-block; margin-top: 10px; color: var(--a1); font: 700 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+
+  .why { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .why div { padding: 20px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); }
+  .why b { display: block; margin-bottom: 4px; font-size: 1.1rem; }
+  .why span { color: var(--muted); }
+
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin: 0; }
+  .fact { min-width: 0; padding: 14px 18px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); }
+  dt { margin-bottom: 4px; color: var(--muted); font: 600 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+  dd { margin: 0; font: 500 14px var(--mono); overflow-wrap: anywhere; }
+
+  footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; margin-top: 20px; padding: 28px 0 48px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+
+  @keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(61, 220, 151, .6); } 70%, 100% { box-shadow: 0 0 0 10px rgba(61, 220, 151, 0); } }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+  @media (max-width: 960px) { .steps { grid-template-columns: repeat(2, 1fr); } .step::after { display: none; } .why { grid-template-columns: 1fr; } }
+  @media (max-width: 560px) { .steps { grid-template-columns: 1fr; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } .step { opacity: 1; transform: none; } }
 </style>
 </head>
 <body>
-<a class="skip" href="#main-content">Skip to main content</a>
-<header class="sidebar">
-<a class="brand" href="#overview" aria-label="CDD Project overview"><span class="mark" aria-hidden="true">C</span><span><strong>CDD Project</strong><small>PR Preview Environment</small></span></a>
-<button class="menu-toggle js-only" type="button" aria-controls="project-navigation" aria-expanded="false">Open navigation</button>
-<nav class="nav" id="project-navigation" aria-label="Project sections">
-<a href="#overview" aria-current="location"><span>01</span>Overview</a><a href="#pipeline"><span>02</span>Pipeline</a><a href="#architecture"><span>03</span>Architecture</a><a href="#lifecycle"><span>04</span>Preview lifecycle</a><a href="#resources"><span>05</span>Resources</a>
-</nav>
-<div class="sidebar-foot"><b>BUILT FOR REVIEW.</b><br>Understand the system.<br>Explore the source of truth.<br><br>GitHub → Azure / Python 3.11</div>
-</header>
-<main class="main" id="main-content">
-<section class="section" id="overview" aria-labelledby="overview-title">
-<div class="hero" id="hero"><canvas id="hero-canvas" aria-hidden="true"></canvas>
-<div class="hero-top"><span class="overview-label">Interactive project overview · Not live monitoring</span><span class="hero-index">CDD / SYSTEM OVERVIEW</span></div>
-<div class="eyebrow" style="margin-bottom:18px">Code. Container. Conversation.</div>
-<h1 id="overview-title">One change.<br>Its own <em>preview.</em></h1>
-<p class="hero-copy">A clear path from trusted code to a reviewable environment. Validate changes, package and publish an image, then deploy an isolated Azure preview—with honest reporting and ownership-aware cleanup.</p>
-<div class="hero-actions"><a class="button primary" href="#pipeline">Explore pipeline <span aria-hidden="true">↗</span></a><a class="button" href="#resources">Run locally <span aria-hidden="true">↗</span></a></div>
-<div class="hero-caption" aria-hidden="true">REVISION → IMAGE → ENVIRONMENT<br>One pull request. One place to review.</div>
+{% set from_ci = info.pr_number and info.commit_sha %}
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><span class="logo">CDD</span> Continuous Delivery Demo</div>
+    {% if from_ci %}
+    <span class="pill"><span class="dot"></span> Live preview · PR #{{ info.pr_number }}</span>
+    {% else %}
+    <span class="pill local"><span class="dot"></span> Local build</span>
+    {% endif %}
+  </header>
+
+  <main>
+    <div class="hero">
+      <p class="eyebrow">Every change gets its own live link</p>
+      <h1>One change.<br>Its own <span class="grad">preview.</span></h1>
+      <p class="lead">Open a pull request and it is tested, built and deployed to its own temporary Azure container. Close it and the container is deleted.</p>
+      {% if from_ci %}
+      <p class="viewing">
+        <span class="label">You are viewing</span>
+        <strong>PR #{{ info.pr_number }}</strong>
+        <span>commit <code>{{ info.commit_sha[:7] }}</code></span>
+        {% if info.branch %}<span>on <code>{{ info.branch }}</code></span>{% endif %}
+      </p>
+      {% if info.repo_url or info.run_url %}
+      <div class="cta">
+        {% if info.repo_url %}<a class="btn primary" href="{{ info.repo_url }}/pull/{{ info.pr_number }}">View the pull request</a>{% endif %}
+        {% if info.run_url %}<a class="btn" href="{{ info.run_url }}">See the CI run</a>{% endif %}
+        {% if info.repo_url %}<a class="btn" href="{{ info.repo_url }}/commit/{{ info.commit_sha }}">Inspect the commit</a>{% endif %}
+      </div>
+      {% endif %}
+      {% else %}
+      <p class="note">Local development — CI revision metadata unavailable.</p>
+      {% endif %}
+    </div>
+
+    <section aria-labelledby="how">
+      <h2 id="how">How it works</h2>
+      <p class="sub">Five automatic steps. Nobody deploys anything by hand.</p>
+      <ol class="steps">
+        <li class="step" style="--i: 0"><div class="n">1</div><h3>Open a PR</h3><p>Push a branch and GitHub Actions starts.</p></li>
+        <li class="step" style="--i: 1"><div class="n">2</div><h3>Test &amp; build</h3><p>Checks must pass, then a Docker image is built.</p></li>
+        <li class="step" style="--i: 2"><div class="n">3</div><h3>Deploy</h3><p>A fresh container starts on Azure.</p></li>
+        <li class="step{% if from_ci %} here{% endif %}" style="--i: 3"><div class="n">4</div><h3>Review</h3><p>Open the live link and see the change running.</p>{% if from_ci %}<span class="tag">You are here</span>{% endif %}</li>
+        <li class="step" style="--i: 4"><div class="n">5</div><h3>Close</h3><p>The container is deleted automatically.</p></li>
+      </ol>
+    </section>
+
+    <section aria-labelledby="why">
+      <h2 id="why">Why it matters</h2>
+      <p class="sub">Reviewers test the real change, not a screenshot of it.</p>
+      <div class="why">
+        <div><b>Isolated</b><span>Every PR gets its own URL and container.</span></div>
+        <div><b>Automatic</b><span>No manual deploys. The link is posted on the PR.</span></div>
+        <div><b>Disposable</b><span>Closing the PR removes it, merged or not.</span></div>
+      </div>
+    </section>
+
+    {% if info.pr_number or info.commit_sha or info.branch or info.image_tag or info.build_time or info.run_url %}
+    <section aria-labelledby="build">
+      <h2 id="build">About this build</h2>
+      <p class="sub">Read from the running container, not typed into the page.</p>
+      <dl class="facts">
+        {% if info.pr_number %}<div class="fact"><dt>Pull request</dt><dd>{% if info.repo_url %}<a href="{{ info.repo_url }}/pull/{{ info.pr_number }}">#{{ info.pr_number }}</a>{% else %}#{{ info.pr_number }}{% endif %}</dd></div>{% endif %}
+        {% if info.commit_sha %}<div class="fact"><dt>Commit</dt><dd>{% if info.repo_url %}<a href="{{ info.repo_url }}/commit/{{ info.commit_sha }}">{{ info.commit_sha }}</a>{% else %}{{ info.commit_sha }}{% endif %}</dd></div>{% endif %}
+        {% if info.branch %}<div class="fact"><dt>Branch</dt><dd>{{ info.branch }}</dd></div>{% endif %}
+        {% if info.build_time %}<div class="fact"><dt>Built by CI</dt><dd>{{ info.build_time }}</dd></div>{% endif %}
+        {% if info.run_url %}<div class="fact"><dt>CI run</dt><dd><a href="{{ info.run_url }}">Open in GitHub Actions</a></dd></div>{% endif %}
+        {% if info.image_tag %}<div class="fact"><dt>Docker image</dt><dd>{{ info.image_tag }}</dd></div>{% endif %}
+      </dl>
+    </section>
+    {% endif %}
+  </main>
+
+  <footer>
+    <span>Flask · Docker · GitHub Actions · Azure Container Instances{% if from_ci %} · Public HTTP preview: never enter sensitive data{% endif %}</span>
+    <a href="{{ url_for('api_info') }}">/api/info (JSON)</a>
+  </footer>
 </div>
-<div class="capabilities" aria-label="Project technologies">
-<div class="capability"><span>01 / ORCHESTRATE</span><strong>GitHub Actions</strong></div><div class="capability"><span>02 / PACKAGE</span><strong>GHCR</strong></div><div class="capability"><span>03 / HOST</span><strong>Azure Container Instances</strong></div><div class="capability"><span>04 / SERVE</span><strong>Flask + Gunicorn</strong></div>
-</div>
-<section class="card revision-panel" aria-labelledby="revision-title">
-<h2 id="revision-title">Preview revision</h2>
-{% if not (info.pr_number and info.commit_sha) %}
-<p>Local development — CI revision metadata unavailable.</p>
-{% endif %}
-{% if info.pr_number or info.commit_sha or info.branch or info.image_tag or info.build_time %}
-<dl class="revision-details">
-{% if info.pr_number %}
-<div><dt>Pull request</dt><dd>{% if info.repo_url %}<a href="{{ info.repo_url }}/pull/{{ info.pr_number }}">#{{ info.pr_number }}</a>{% else %}#{{ info.pr_number }}{% endif %}</dd></div>
-{% endif %}
-{% if info.commit_sha %}
-<div><dt>Full commit SHA</dt><dd>{% if info.repo_url %}<a href="{{ info.repo_url }}/commit/{{ info.commit_sha }}"><code>{{ info.commit_sha }}</code></a>{% else %}<code>{{ info.commit_sha }}</code>{% endif %}</dd></div>
-{% endif %}
-{% if info.branch %}
-<div><dt>Branch</dt><dd><code>{{ info.branch }}</code></dd></div>
-{% endif %}
-{% if info.image_tag %}
-<div><dt>Image tag</dt><dd><code>{{ info.image_tag }}</code></dd></div>
-{% endif %}
-{% if info.build_time %}
-<div><dt>Build time</dt><dd>{{ info.build_time }}</dd></div>
-{% endif %}
-</dl>
-{% endif %}
-<div class="revision-links">{% if info.run_url %}<a href="{{ info.run_url }}">CI run</a>{% endif %}<a href="{{ url_for('api_info') }}">Build metadata JSON</a></div>
-</section>
-</section>
-<section class="section" id="pipeline" aria-labelledby="pipeline-title">
-<div class="section-head"><div><div class="eyebrow"><span class="section-number">02 /</span> The delivery path</div><h2 id="pipeline-title">One change. Six stages.</h2></div><p>Explore how a trusted pull request becomes a public preview. These stages explain the workflow, not a current run.</p></div>
-<div class="pipeline-layout"><aside class="pipeline-note"><span class="pill">WORKFLOW EXPLORER</span><h3>Follow the revision,<br>not just the image.</h3><p>Publishing a container is only the midpoint. A preview URL is reported only after the environment passes readiness checks.</p></aside>
-<ol class="pipeline-list">
-<li><button class="stage-toggle" type="button" aria-expanded="true" aria-controls="stage-validate"><span class="stage-number">01</span><strong>Validate</strong><span class="stage-type">PYTHON 3.11</span><span class="plus" aria-hidden="true">−</span></button><div class="stage-panel" id="stage-validate"><p>Start with Python 3.11. Compile the application, lint application and test code, then run the automated test suite.</p><div class="code-list"><code>python -m py_compile app.py</code><code>flake8 app.py tests</code><code>pytest -v</code></div></div></li>
-<li><button class="stage-toggle" type="button" aria-expanded="true" aria-controls="stage-publish"><span class="stage-number">02</span><strong>Publish image</strong><span class="stage-type">DOCKER BUILDX / GHCR</span><span class="plus" aria-hidden="true">−</span></button><div class="stage-panel" id="stage-publish"><p>Docker Buildx builds the container and publishes three tag patterns to GitHub Container Registry. The revision-pinned PR tag is deployed, tying the preview to the requested revision.</p><div class="code-list"><code>ghcr.io/&lt;owner&gt;/&lt;repo&gt;:pr-&lt;pr_number&gt;</code><code>ghcr.io/&lt;owner&gt;/&lt;repo&gt;:&lt;commit_sha&gt;</code><code>ghcr.io/&lt;owner&gt;/&lt;repo&gt;:pr-&lt;pr_number&gt;-&lt;short_sha&gt;</code></div></div></li>
-<li><button class="stage-toggle" type="button" aria-expanded="true" aria-controls="stage-deploy"><span class="stage-number">03</span><strong>Deploy preview</strong><span class="stage-type">AZURE CONTAINER INSTANCES</span><span class="plus" aria-hidden="true">−</span></button><div class="stage-panel" id="stage-deploy"><p><code>scripts/deploy-preview.sh</code> creates or updates <code>preview-pr-&lt;number&gt;</code>: a Linux ACI container group with 1 vCPU, 1 GiB memory, and application port <code>8080</code> by default. Only matching owned resources may be deployed or updated.</p></div></li>
-<li><button class="stage-toggle" type="button" aria-expanded="true" aria-controls="stage-readiness"><span class="stage-number">04</span><strong>Verify readiness</strong><span class="stage-type">PROVISIONING + HTTP</span><span class="plus" aria-hidden="true">−</span></button><div class="stage-panel" id="stage-readiness"><p>Require successful provisioning, the requested image, actual FQDN and network data, and a successful HTTP GET <code>/</code> before publishing a preview URL. Image publication alone is not preview success.</p></div></li>
-<li><button class="stage-toggle" type="button" aria-expanded="true" aria-controls="stage-report"><span class="stage-number">05</span><strong>Report to PR</strong><span class="stage-type">STATUS + COMMENT</span><span class="plus" aria-hidden="true">−</span></button><div class="stage-panel" id="stage-report"><p>The workflow attempts to update commit status <code>PR Preview Deployment</code> and one in-place bot comment identified by <code>&lt;!-- cdd-pr-preview-status --&gt;</code>. Subsequent updates reuse the bot comment; failures have no success URL. Both reporting channels are attempted, and a delivery failure fails the reporting step instead of silently leaving a green run.</p></div></li>
-<li><button class="stage-toggle" type="button" aria-expanded="true" aria-controls="stage-cleanup"><span class="stage-number">06</span><strong>Clean up</strong><span class="stage-type">OWNERSHIP-AWARE</span><span class="plus" aria-hidden="true">−</span></button><div class="stage-panel" id="stage-cleanup"><p><code>.github/workflows/pr-cleanup.yml</code> invokes <code>scripts/cleanup-preview.sh</code> when a PR closes, merged or unmerged, with deployment credentials configured. Ownership is verified before deletion; a missing resource is an idempotent success, while ownership mismatch prevents destructive action.</p></div></li>
-</ol></div>
-</section>
-<section class="section" id="architecture" aria-labelledby="architecture-title">
-<div class="section-head"><div><div class="eyebrow"><span class="section-number">03 /</span> System architecture</div><h2 id="architecture-title">A small, deliberate stack.</h2></div><p>Source to registry to review. Each boundary has one job, and the application stays intentionally simple.</p></div>
-<div class="card flow-card"><div class="flow-label">Delivery flow / read left to right, then next row</div>
-<div class="system-flow" aria-label="Trusted PR to GitHub Actions to GHCR revision image to Azure Container Instances to public preview to reviewer feedback">
-<div class="flow-node"><small>01 / SOURCE</small><strong>Trusted PR</strong><svg aria-hidden="true" viewBox="0 0 25 14"><path d="M0 7h23m-6-5 6 5-6 5" stroke="currentColor" fill="none"/></svg></div>
-<div class="flow-node"><small>02 / AUTOMATE</small><strong>GitHub Actions</strong><svg aria-hidden="true" viewBox="0 0 25 14"><path d="M0 7h23m-6-5 6 5-6 5" stroke="currentColor" fill="none"/></svg></div>
-<div class="flow-node"><small>03 / PUBLISH</small><strong>GHCR revision image</strong><svg aria-hidden="true" viewBox="0 0 25 14"><path d="M0 7h23m-6-5 6 5-6 5" stroke="currentColor" fill="none"/></svg></div>
-<div class="flow-node"><small>04 / DEPLOY</small><strong>Azure Container Instances</strong><svg aria-hidden="true" viewBox="0 0 25 14"><path d="M0 7h23m-6-5 6 5-6 5" stroke="currentColor" fill="none"/></svg></div>
-<div class="flow-node"><small>05 / REACH</small><strong>Public preview</strong><svg aria-hidden="true" viewBox="0 0 25 14"><path d="M0 7h23m-6-5 6 5-6 5" stroke="currentColor" fill="none"/></svg></div>
-<div class="flow-node"><small>06 / REVIEW</small><strong>Reviewer feedback</strong></div></div>
-<p class="flow-caption">The published revision becomes a reviewable environment, not a production release.</p>
-<div class="serving" aria-label="Serving path"><span>Browser</span><b aria-hidden="true">→</b><span>Gunicorn <code>app:app</code></span><b aria-hidden="true">→</b><span>Flask <code>home()</code></span><b aria-hidden="true">→</b><span>Dashboard</span></div>
-<div class="architecture-notes"><div><h3>Reachability ≠ visual correctness</h3><p>Root readiness checks HTTP reachability. A successful GET <code>/</code> does not prove the layout, interactions, or displayed revision are correct; those still need review.</p></div><div><h3>No frontend build required</h3><p><code>app.py</code> serves this self-contained template via Flask. <code>Dockerfile</code> packages the project; Gunicorn serves <code>app:app</code>. No external assets or dashboard API are required.</p></div></div>
-</div>
-</section>
-<section class="section" id="lifecycle" aria-labelledby="lifecycle-title">
-<div class="section-head"><div><div class="eyebrow"><span class="section-number">04 /</span> Preview lifecycle</div><h2 id="lifecycle-title">Temporary by design.</h2></div><p>A dedicated place to review changes, with explicit boundaries for its entire lifetime.</p></div>
-<div class="lifecycle-grid"><article class="card lifecycle-card"><div class="step">01</div><h3>Open. Push. Update.</h3><p>A trusted PR triggers validation and deployment. Later pushes update the same PR environment. Stable same-PR addressing depends on a stable <code>PREVIEW_DNS_PREFIX</code> and configuration.</p></article><article class="card lifecycle-card"><div class="step">02</div><h3>Review in isolation.</h3><p>Independent PRs have separate preview environments. Review visible changes and gather feedback without treating the preview as production.</p></article><article class="card lifecycle-card"><div class="step">03</div><h3>Close the loop.</h3><p>Merged or unmerged closure triggers cleanup when credentials are configured. Ownership must match before deletion; already-absent environments are handled safely.</p></article></div>
-<div class="serialization"><div class="eyebrow">One PR, serialized mutations</div><p>Deployments and cleanup serialize per PR under <code>cdd-preview-pr-&lt;number&gt;</code> with <code>cancel-in-progress: false</code>. Separate PRs can proceed independently. This is serialization, not a durable ordered queue; workflows recheck current PR state and revision before mutations.</p></div>
-<aside class="card safety" aria-labelledby="safety-title"><h3 id="safety-title">Preview does not mean private.</h3><ul><li>Run secret-bearing workflows for trusted PR code only.</li><li>Use dedicated nonproduction resources.</li><li>Previews use public, unauthenticated HTTP—not HTTPS.</li><li>Never include sensitive data or application secrets.</li><li>Azure Container Instances incur charges while running.</li><li>Ownership mismatch prevents destructive action.</li></ul><p class="safety-tags">Cleanup verifies all three ownership tags: <code>managed-by=cdd-preview</code>, <code>pr-number=&lt;number&gt;</code>, and <code>preview-owner=&lt;PREVIEW_DNS_PREFIX&gt;</code>.</p></aside>
-</section>
-<section class="section" id="resources" aria-labelledby="resources-title">
-<div class="section-head"><div><div class="eyebrow"><span class="section-number">05 /</span> Developer resources</div><h2 id="resources-title">Your next command.</h2></div><p>Local setup, workflow inputs, and review guidance. Reference material—not live configuration.</p></div>
-<div class="search-row js-only"><div class="search-field"><label for="resource-search">Search project resources</label><input id="resource-search" type="search" placeholder="Search commands, configuration, or workflow…" autocomplete="off"></div><button class="button" id="clear-search" type="button">Clear search</button></div>
-<p class="results js-only" id="search-results" aria-live="polite">6 resources shown</p>
-<div class="grid-two" id="resource-library">
-<article class="card resource-card"><span class="resource-kicker">01 / LOCAL DEVELOPMENT</span><h3>Run locally</h3><p>Install requirements first, then start Flask. The default URL is <code>http://localhost:8080</code>.</p><div class="command"><code>python -m pip install -r requirements.txt</code><button class="copy js-only" type="button" aria-label="Copy install requirements command">Copy</button></div><div class="command"><code>python app.py</code><button class="copy js-only" type="button" aria-label="Copy local run command">Copy</button></div></article>
-<article class="card resource-card"><span class="resource-kicker">02 / CONTAINER DEVELOPMENT</span><h3>Run with Docker</h3><p>Build the application image, then map local port 8080 to the container's application port.</p><div class="command"><code>docker build -t cdd-demo-app .</code><button class="copy js-only" type="button" aria-label="Copy Docker build command">Copy</button></div><div class="command"><code>docker run -p 8080:8080 cdd-demo-app</code><button class="copy js-only" type="button" aria-label="Copy Docker run command">Copy</button></div></article>
-<article class="card resource-card"><span class="resource-kicker">03 / LOCAL CHECKS</span><h3>Validate changes</h3><p>Use the same compilation, linting, and test commands as the Python 3.11 validation stage.</p><div class="command"><code>python -m py_compile app.py</code><button class="copy js-only" type="button" aria-label="Copy compilation command">Copy</button></div><div class="command"><code>flake8 app.py tests</code><button class="copy js-only" type="button" aria-label="Copy lint command">Copy</button></div><div class="command"><code>pytest -v</code><button class="copy js-only" type="button" aria-label="Copy test command">Copy</button></div></article>
-<article class="card resource-card"><span class="resource-kicker">04 / DEPLOYMENT INPUTS</span><h3>Preview configuration</h3><p>Configure these names in the deployment environment. Never paste credentials into this dashboard.</p><div class="config"><code>PR_NUMBER</code><span>Required</span><code>IMAGE_REF</code><span>Required</span><code>AZURE_CREDENTIALS</code><span>Required</span><code>PREVIEW_DNS_PREFIX</code><span>Required</span><code>AZURE_RESOURCE_GROUP</code><span>Default: <code>cdd-preview-rg</code></span><code>CONTAINER_PORT</code><span>Default: <code>8080</code></span></div><p><code>REGISTRY_USERNAME</code> and <code>REGISTRY_PASSWORD</code> are paired optional inputs for private packages. Setup source: <code>docs/CI_SECRETS_SETUP.md</code>.</p></article>
-<article class="card resource-card"><span class="resource-kicker">05 / SOURCE MAP</span><h3>Workflow sources</h3><dl class="source-list"><div><dt><code>.github/workflows/ci.yml</code></dt><dd>Validate, publish, deploy, and report preview results.</dd></div><div><dt><code>.github/workflows/pr-cleanup.yml</code></dt><dd>Trigger cleanup on merged or unmerged closure.</dd></div><div><dt><code>scripts/deploy-preview.sh</code></dt><dd>Deploy owned resources and verify readiness.</dd></div><div><dt><code>scripts/cleanup-preview.sh</code></dt><dd>Verify ownership and delete the PR environment.</dd></div></dl></article>
-<article class="card resource-card"><span class="resource-kicker">06 / HUMAN VERIFICATION</span><h3>Review checklist</h3><p>Use these checks when reviewing a real preview. They are instructions, not claims about current runs.</p><ul><li>Verify the revision's visible changes.</li><li>Check that same-PR pushes update the environment.</li><li>Confirm separate PRs remain isolated.</li><li>Verify honest failure reporting without a success URL.</li><li>Check cleanup after both merged and unmerged closure.</li></ul></article>
-</div><p class="empty" id="no-resources" hidden>No resources match your search.</p>
-</section>
-<footer class="footer"><span>CDD PROJECT / PR PREVIEW ENVIRONMENT</span><span>Project documentation, made explorable. Not live monitoring.</span></footer>
-<div class="sr-only" id="copy-status" role="status" aria-live="polite"></div>
-</main>
-<script>
-/* Essential interactions do not depend on graphics. */
-(() => {
-  'use strict';
-  const nav=document.getElementById('project-navigation'),toggle=document.querySelector('.menu-toggle'),mobile=matchMedia('(max-width:767px)');
-  const menu=open=>{nav.hidden=mobile.matches&&!open;toggle.setAttribute('aria-expanded',String(open));toggle.textContent=open?'Close navigation':'Open navigation';};
-  toggle.addEventListener('click',()=>menu(toggle.getAttribute('aria-expanded')!=='true'));
-  nav.addEventListener('click',e=>{if(e.target.closest('a'))menu(false);});
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&mobile.matches&&toggle.getAttribute('aria-expanded')==='true'){menu(false);toggle.focus();}});
-  mobile.addEventListener('change',()=>menu(false));menu(false);
-  const stages=[...document.querySelectorAll('.stage-toggle')];
-  const stage=(button,open)=>{button.setAttribute('aria-expanded',String(open));document.getElementById(button.getAttribute('aria-controls')).hidden=!open;button.querySelector('.plus').textContent=open?'−':'+';};
-  stages.forEach((button,index)=>{stage(button,index===0);button.addEventListener('click',()=>{const open=button.getAttribute('aria-expanded')!=='true';stages.forEach(item=>stage(item,item===button&&open));});});
-  const search=document.getElementById('resource-search'),cards=[...document.querySelectorAll('.resource-card')],texts=cards.map(card=>card.textContent.toLocaleLowerCase());
-  const filter=()=>{const query=search.value.trim().toLocaleLowerCase();let count=0;cards.forEach((card,index)=>{card.hidden=!texts[index].includes(query);if(!card.hidden)count++;});document.getElementById('search-results').textContent=`${count} ${count===1?'resource':'resources'} shown`;document.getElementById('no-resources').hidden=count!==0;};
-  search.addEventListener('input',filter);document.getElementById('clear-search').addEventListener('click',()=>{search.value='';filter();search.focus();});
-  const status=document.getElementById('copy-status');let announcement;
-  const announce=message=>{clearTimeout(announcement);status.textContent='';announcement=setTimeout(()=>{status.textContent=message;},40);};
-  document.querySelectorAll('.copy').forEach(button=>button.addEventListener('click',async()=>{const command=button.parentElement.querySelector('code');try{if(!navigator.clipboard||!navigator.clipboard.writeText)throw new Error('Unavailable');await navigator.clipboard.writeText(command.textContent);announce('Copied command to clipboard.');}catch(_){const selection=window.getSelection(),range=document.createRange();range.selectNodeContents(command);if(selection){selection.removeAllRanges();selection.addRange(range);}announce('Select the command and copy manually.');}}));
-  document.documentElement.classList.add('js');
-  if('IntersectionObserver'in window){const sections=[...document.querySelectorAll('main > section')],visible=new Map();const observer=new IntersectionObserver(entries=>{entries.forEach(entry=>visible.set(entry.target.id,entry.isIntersecting?entry.intersectionRatio:0));const current=sections.reduce((best,item)=>(visible.get(item.id)||0)>(visible.get(best.id)||0)?item:best,sections[0]);if((visible.get(current.id)||0)>0)nav.querySelectorAll('a').forEach(link=>{if(link.hash===`#${current.id}`)link.setAttribute('aria-current','location');else link.removeAttribute('aria-current');});},{rootMargin:'-90px 0px -25% 0px',threshold:[0,.1,.25,.5,.75,1]});sections.forEach(section=>observer.observe(section));}
-})();
-</script>
-<script id="hero-vertex" type="x-shader/x-vertex">
-attribute vec2 a_position;
-void main(){gl_Position=vec4(a_position,0.0,1.0);}
-</script>
-<script id="hero-fragment" type="x-shader/x-fragment">
-precision mediump float;
-uniform vec2 u_resolution;
-uniform vec2 u_pointer;
-uniform float u_time;
-uniform float u_scroll;
-float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
-float bayer(vec2 p){vec2 q=mod(floor(p),4.0);float x=mod(q.x,2.0),y=mod(q.y,2.0);float a=2.0*x+3.0*y-4.0*x*y;vec2 z=floor(q/2.0);return(4.0*a+2.0*z.x+3.0*z.y-4.0*z.x*z.y+.5)/16.0;}
-void main(){
- vec2 uv=gl_FragCoord.xy/u_resolution;
- vec2 p=vec2((uv.x-.64)*(u_resolution.x/u_resolution.y),uv.y-.5);
- float t=u_time*.19;
- p+=(.16+u_scroll*.12)*vec2(sin(p.y*4.4+t+u_pointer.x),cos(p.x*3.3-t+u_pointer.y));
- float ribbon=sin(p.x*7.0+p.y*3.0+sin(p.y*5.0-t)*1.5+t);
- float bands=smoothstep(.15,.95,ribbon)*(1.0-smoothstep(.05,1.3,length(p)));
- float thin=pow(.5+.5*sin(p.x*28.0+p.y*10.0+t*2.0),15.0);
- vec3 color=mix(vec3(.42,.28,.85),vec3(.15,.75,.83),clamp(uv.y*.8+u_scroll*.3+sin(t)*.13,0.,1.));
- vec3 result=vec3(.035,.05,.085)+color*(bands*.65+thin*.18);
- vec2 cell=floor(gl_FragCoord.xy/7.0);
- float star=step(.985,hash(cell))*step(.86,hash(cell+vec2(31.0)));
- result+=star*.45*(.6+.4*sin(t+hash(cell)*6.28));
- result+=vec3((bayer(gl_FragCoord.xy)-.5)/22.0);
- result=mix(vec3(.035,.05,.085),result,smoothstep(.25,.9,uv.x));
- gl_FragColor=vec4(result,1.0);
-}
-</script>
-<script>
-/* Decorative enhancements: independent and motion-aware. */
-(() => {
- 'use strict';
- const motion=matchMedia('(prefers-reduced-motion:reduce)'),mobile=matchMedia('(max-width:767px)');
- const cards=[...document.querySelectorAll('.lifecycle-card')];let revealObserver;
- const reveal=()=>{if(revealObserver)revealObserver.disconnect();cards.forEach(card=>{card.classList.remove('reveal-pending');card.style.transitionDelay='';});if(motion.matches||!('IntersectionObserver'in window))return;revealObserver=new IntersectionObserver(entries=>entries.forEach(entry=>{if(entry.isIntersecting){entry.target.classList.remove('reveal-pending');revealObserver.unobserve(entry.target);}}),{threshold:.08});cards.forEach((card,index)=>{card.classList.add('reveal-ready','reveal-pending');card.style.transitionDelay=`${index*60}ms`;revealObserver.observe(card);});};
- reveal();motion.addEventListener('change',reveal);
- document.addEventListener('pointermove',event=>{if(motion.matches)return;const card=event.target.closest('.card');if(card){const rect=card.getBoundingClientRect();card.style.setProperty('--px',`${event.clientX-rect.left}px`);card.style.setProperty('--py',`${event.clientY-rect.top}px`);}},{passive:true});
- const hero=document.getElementById('hero'),canvas=document.getElementById('hero-canvas');
- let gl=null,program=null,buffer=null,uniforms=null,frame=0,visible=true,lost=false,width=1,height=1,left=0,top=0,scroll=0,last=0,elapsed=0;
- const target={x:.5,y:.5},pointer={x:.5,y:.5};
- const stop=()=>{if(frame)cancelAnimationFrame(frame);frame=0;last=0;};
- const dispose=()=>{stop();if(gl){if(buffer)gl.deleteBuffer(buffer);if(program)gl.deleteProgram(program);}buffer=null;program=null;uniforms=null;};
- const updateScroll=()=>{scroll=Math.max(0,Math.min(1,window.scrollY/Math.max(height,1)));};
- const resize=()=>{const rect=hero.getBoundingClientRect();width=rect.width;height=rect.height;left=rect.left+window.scrollX;top=rect.top+window.scrollY;const dpr=Math.min(devicePixelRatio||1,mobile.matches?1:1.5);canvas.width=Math.max(1,Math.round(width*dpr));canvas.height=Math.max(1,Math.round(height*dpr));if(gl)gl.viewport(0,0,canvas.width,canvas.height);updateScroll();};
- const canRun=()=>program&&!lost&&!motion.matches&&visible&&!document.hidden;
- const tick=now=>{frame=0;if(!canRun()){last=0;return;}const interval=1000/(mobile.matches?30:60);if(!last||now-last>=interval-.5){const delta=last?Math.min((now-last)/1000,.1):0;elapsed+=delta;last=now;pointer.x+=(target.x-pointer.x)*.07;pointer.y+=(target.y-pointer.y)*.07;gl.uniform2f(uniforms.resolution,canvas.width,canvas.height);gl.uniform2f(uniforms.pointer,pointer.x,pointer.y);gl.uniform1f(uniforms.time,elapsed);gl.uniform1f(uniforms.scroll,scroll);gl.drawArrays(gl.TRIANGLES,0,3);}frame=requestAnimationFrame(tick);};
- const sync=()=>{if(canRun()){if(!frame)frame=requestAnimationFrame(tick);}else stop();};
- const initialize=()=>{if(motion.matches||lost)return;const shaders=[];try{
-  gl=canvas.getContext('webgl',{alpha:false,antialias:false,depth:false,stencil:false,powerPreference:'low-power'});if(!gl)return;
-  const compile=(type,id)=>{const shader=gl.createShader(type);if(!shader)throw new Error('Shader unavailable');shaders.push(shader);gl.shaderSource(shader,document.getElementById(id).textContent);gl.compileShader(shader);if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS))throw new Error('Compile failure');return shader;};
-  program=gl.createProgram();if(!program)throw new Error('Program unavailable');
-  gl.attachShader(program,compile(gl.VERTEX_SHADER,'hero-vertex'));gl.attachShader(program,compile(gl.FRAGMENT_SHADER,'hero-fragment'));gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error('Link failure');gl.useProgram(program);
-  buffer=gl.createBuffer();if(!buffer)throw new Error('Buffer unavailable');gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);
-  const position=gl.getAttribLocation(program,'a_position');gl.enableVertexAttribArray(position);gl.vertexAttribPointer(position,2,gl.FLOAT,false,0,0);
-  uniforms={resolution:gl.getUniformLocation(program,'u_resolution'),pointer:gl.getUniformLocation(program,'u_pointer'),time:gl.getUniformLocation(program,'u_time'),scroll:gl.getUniformLocation(program,'u_scroll')};
-  canvas.style.visibility='visible';resize();sync();
- }catch(_){dispose();canvas.style.visibility='hidden';}finally{if(gl)shaders.forEach(shader=>gl.deleteShader(shader));}};
- hero.addEventListener('pointermove',event=>{target.x=Math.max(0,Math.min(1,(event.pageX-left)/width));target.y=Math.max(0,Math.min(1,1-(event.pageY-top)/height));},{passive:true});
- window.addEventListener('scroll',updateScroll,{passive:true});document.addEventListener('visibilitychange',sync);
- canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();lost=true;dispose();canvas.style.visibility='hidden';});
- canvas.addEventListener('webglcontextrestored',()=>{lost=false;initialize();});
- motion.addEventListener('change',()=>{if(motion.matches){dispose();canvas.style.visibility='hidden';}else initialize();});
- mobile.addEventListener('change',resize);
- if('ResizeObserver'in window)new ResizeObserver(resize).observe(hero);else window.addEventListener('resize',resize,{passive:true});
- if('IntersectionObserver'in window)new IntersectionObserver(entries=>{visible=entries[0].isIntersecting;sync();}).observe(hero);
- resize();initialize();
-})();
-</script>
 </body>
 </html>

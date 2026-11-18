@@ -1,12 +1,12 @@
 # CDD Project Demo Application
 
-## Interactive project dashboard
+## Preview page
 
-The Flask root route serves `templates/dashboard.html`: a self-contained project
-overview, not live GitHub or Azure monitoring. Explore the six-stage pipeline,
-architecture, preview lifecycle and safety constraints, or search the six resource
-cards for commands and configuration names. Copy controls use the Clipboard API
-when available and select command text for manual copying otherwise.
+The Flask root route serves `templates/dashboard.html`: one calm, script-free page that
+explains the idea in five steps and, for CI builds, shows which PR, commit and CI run
+produced this very container. It is a static explanation plus build metadata, not live
+GitHub or Azure monitoring. The accent colour comes from the PR number (consecutive PRs
+get clearly different colours), so previews opened side by side are easy to tell apart.
 
 Install dependencies and start the application directly:
 
@@ -16,10 +16,8 @@ python app.py
 ```
 
 Open `http://localhost:8080` (or set `PORT` to an available port). No frontend build,
-external assets, credentials, or sibling reference files are needed. JavaScript
-enhances navigation, disclosures, search, and copy; without it, all project details
-and commands remain readable. The decorative WebGL hero falls back to CSS artwork
-when unavailable and respects reduced-motion preferences.
+JavaScript, external assets, credentials, or sibling reference files are needed. The
+page respects reduced-motion preferences.
 
 ## Local Run Instructions
 
@@ -44,18 +42,18 @@ docker run -e PORT=8090 -p 8080:8090 cdd-demo-app
 ```
 
 ### What the page shows
-The server-rendered **Preview revision** panel shows the supplied PR number, full
-commit SHA, branch and image tag, with links to the PR, commit and CI run when
-provided. Metadata is escaped as text, not rendered as HTML. `ci.yml` supplies the
+The server-rendered **About this build** section shows the supplied PR number, full
+commit SHA, branch, build time and image tag, with links to the PR, commit and CI run
+when provided. Metadata is escaped as text, not rendered as HTML. `ci.yml` supplies the
 seven Docker build args (`PR_NUMBER`, `COMMIT_SHA`, `BRANCH`, `BUILD_TIME`,
 `RUN_URL`, `REPO_URL`, `IMAGE_TAG`); the Dockerfile exposes them as environment
-variables and `app.py` passes their real values to the dashboard. Without both a
-PR number and commit SHA, the panel says “Local development — CI revision metadata
+variables and `app.py` passes their real values to the page. Without both a
+PR number and commit SHA, the page says “Local development — CI revision metadata
 unavailable.” Partial metadata is still shown when supplied; no revision values
 are invented.
 
 `/api/info` preserves all seven build fields plus the actual hostname,
-process start time and uptime in JSON. The dashboard does not display uptime,
+process start time and uptime in JSON. The page does not display uptime,
 health widgets or live-monitoring claims. A plain local build has empty CI
 metadata; to simulate a PR:
 ```bash

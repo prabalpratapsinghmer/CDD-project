@@ -1,5 +1,5 @@
 import pytest
-from app import STARTED_AT, app
+from app import STARTED_AT, accent_hue, app
 
 BUILD_ENV = {
     'PR_NUMBER': '7',
@@ -97,3 +97,19 @@ def test_api_info_reports_build_and_uptime(client, monkeypatch):
     assert data['started_at'] == STARTED_AT.isoformat()
     assert isinstance(data['uptime_seconds'], int)
     assert data['uptime_seconds'] >= 0
+
+
+def test_consecutive_prs_get_clearly_different_tints():
+    for number in range(1, 200):
+        a, b = accent_hue(str(number)), accent_hue(str(number + 1))
+        assert 0 <= a < 360
+        assert min((a - b) % 360, (b - a) % 360) > 90
+
+
+@pytest.mark.parametrize('pr_number', [
+    '', 'abc', '²', '٣', '1' * 11, '9' * 5000])
+def test_malformed_pr_number_gets_default_tint_and_page_still_renders(
+        client, monkeypatch, pr_number):
+    assert accent_hue(pr_number) == accent_hue('')
+    set_build_env(monkeypatch, PR_NUMBER=pr_number)
+    assert client.get('/').status_code == 200
