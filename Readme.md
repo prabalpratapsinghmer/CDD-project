@@ -2,11 +2,13 @@
 
 ## Preview page
 
-The Flask root route serves `templates/dashboard.html`: one calm, script-free page that
-explains the idea in five steps and, for CI builds, shows which PR, commit and CI run
-produced this very container. It is a static explanation plus build metadata, not live
-GitHub or Azure monitoring. The accent colour comes from the PR number (consecutive PRs
-get clearly different colours), so previews opened side by side are easy to tell apart.
+The Flask root route serves `templates/dashboard.html`: one light, script-free page that
+explains the idea (a five-step pipeline and a with/without comparison) and, for CI
+builds, a deployment card showing which PR, commit and image produced this very
+container. It is a static explanation plus build metadata, not live GitHub or Azure
+monitoring. The accent colour comes from the PR number (consecutive PRs get clearly
+different colours, all readable with white text), so side-by-side previews are easy to
+tell apart.
 
 Install dependencies and start the application directly:
 
@@ -16,8 +18,7 @@ python app.py
 ```
 
 Open `http://localhost:8080` (or set `PORT` to an available port). No frontend build,
-JavaScript, external assets, credentials, or sibling reference files are needed. The
-page respects reduced-motion preferences.
+JavaScript, external assets, credentials, or sibling reference files are needed.
 
 ## Local Run Instructions
 
@@ -42,7 +43,7 @@ docker run -e PORT=8090 -p 8080:8090 cdd-demo-app
 ```
 
 ### What the page shows
-The server-rendered **About this build** section shows the supplied PR number, full
+The server-rendered **This deployment** card shows the supplied PR number, full
 commit SHA, branch, build time and image tag, with links to the PR, commit and CI run
 when provided. Metadata is escaped as text, not rendered as HTML. `ci.yml` supplies the
 seven Docker build args (`PR_NUMBER`, `COMMIT_SHA`, `BRANCH`, `BUILD_TIME`,
@@ -53,8 +54,9 @@ unavailable.” Partial metadata is still shown when supplied; no revision value
 are invented.
 
 `/api/info` preserves all seven build fields plus the actual hostname,
-process start time and uptime in JSON. The page does not display uptime,
-health widgets or live-monitoring claims. A plain local build has empty CI
+process start time and uptime in JSON. The page does not display uptime or health
+data; its “Running” badge is static (true whenever the page can be served, not a
+health check). A plain local build has empty CI
 metadata; to simulate a PR:
 ```bash
 docker build -t cdd-demo-app --build-arg PR_NUMBER=7 --build-arg COMMIT_SHA=$(git rev-parse HEAD) --build-arg BRANCH=demo .
