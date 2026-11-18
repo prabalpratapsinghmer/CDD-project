@@ -6,7 +6,7 @@
 
 **Demo approach:** Open a controlled PR, wait for observed readiness, then share its reported preview link. There is no two-minute guarantee: historical first ACI creation took over 15 minutes before reliable FQDN reachability, with warm updates around 2.5–3 minutes. Pre-warm for the presentation and keep workflow, screenshot and cleanup evidence available.
 
-**Historical starting point:** The repository was empty when this guide was first created; that statement is not current status. The integrated implementation now uses Flask, a pinned Python 3.11 Docker base/dependency set, GitHub Actions, GHCR and ACI. See `Readme.md` for the existing container/PORT contract and `docs/CI_SECRETS_SETUP.md` for the current runbook and dated observations. Candidate implementation is reviewed without merging main: main's installed automatic workflows are unchanged until review/merge, and candidate control logic must be exercised using the CI workflow's explicit candidate ref dispatch.
+**Historical starting point:** The repository was empty when this guide was first created; that statement is not current status. The integrated implementation now uses Flask, a pinned Python 3.11 Docker base/dependency set, GitHub Actions, GHCR and ACI. See `Readme.md` for the existing container/PORT contract and `docs/CI_SECRETS_SETUP.md` for the current runbook and dated observations. The completion candidate (PRs #8 and #10) has since been merged to `main`; a future change can still be exercised before merging by dispatching the CI workflow with an explicit candidate ref.
 
 ## What the finished system does
 
@@ -127,12 +127,12 @@ Assign these roles to the five teammates. Replace the labels with names. Agree o
 - [x] Provision B's deliberate failing image, show real HTTP 503 and fail-visible reporting without a success URL.
 - [x] Close B unmerged, distinguish installed-main automatic deletion from candidate behavior, and repeat candidate cleanup with `not-found`.
 - [x] Verify A healthy/current and B absent; preserve actual captures and artifact links.
-- [ ] Finish the pre-cleanup commit/push and let its final A deployment settle.
-- [ ] Intentionally clean A, strictly verify both previews absent, leave A open/unmerged, and publish terminal evidence in the reserved comment; do not push afterward.
+- [x] Finish the pre-cleanup commit/push and let its final A deployment settle (final PR-event run 44211532139).
+- [x] Intentionally clean A, strictly verify both previews absent, and publish terminal evidence in the reserved comment (cleanup run 44213089612, both-absent verification run 44213211514). PR #8 was merged afterwards, together with #10.
 
 For completion-candidate verification, use the exact `preview`, read-only `verify`, and guarded `cleanup` dispatch examples in `docs/CI_SECRETS_SETUP.md`. Verify two current owned images and public URLs, stable same-PR addressing, sibling isolation, fail-visible reporting and repeated deletion. Preserve evidence before removing only the test PR resources. Leave the implementation PR open/unmerged and intentionally remove its billable preview at the end.
 
-The dated [acceptance evidence and repeatable demo](docs/ACCEPTANCE_EVIDENCE.md) records full SHAs, live runs, screenshots, observed failures/recovery, local-versus-cloud proof, and candidate-versus-installed-main limitations. The final terminal addendum belongs in [reserved acceptance comment 6954553166](https://github.com/prabalpratapsinghmer/CDD-project/pull/8#issuecomment-6954553166), updated only after cleanup and strict absence verification are observed. The unchecked terminal items above are deliberately not claimed by this pre-cleanup document.
+The dated [acceptance evidence and repeatable demo](docs/ACCEPTANCE_EVIDENCE.md) records full SHAs, live runs, screenshots, observed failures/recovery, local-versus-cloud proof, and candidate-versus-installed-main limitations. The final terminal addendum is in [reserved acceptance comment 6954553166](https://github.com/prabalpratapsinghmer/CDD-project/pull/8#issuecomment-6954553166); the terminal items above were completed after this document was first committed.
 
 
 ## Project completion

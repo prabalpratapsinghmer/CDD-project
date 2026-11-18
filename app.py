@@ -1,4 +1,5 @@
 import os
+import re
 import socket
 from datetime import datetime, timezone
 
@@ -31,10 +32,20 @@ def build_info():
     }
 
 
+def accent_hue(pr_number):
+    """Golden-angle steps keep consecutive PRs far apart on the colour wheel,
+    so side-by-side previews are easy to tell apart."""
+    # Same contract as the deploy scripts: a positive integer, <= 10 digits.
+    if not re.fullmatch(r'[0-9]{1,10}', pr_number):
+        return 262
+    return round(int(pr_number) * 137.508) % 360
+
+
 @app.route('/')
 def home():
     info = build_info()
-    return render_template('dashboard.html', info=info)
+    return render_template(
+        'dashboard.html', info=info, hue=accent_hue(info['pr_number']))
 
 
 @app.route('/api/info')

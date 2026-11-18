@@ -1,0 +1,43 @@
+{
+  "operation": "verify",
+  "records": [
+    {
+      "pr_number": "6",
+      "resource_name": "preview-pr-6",
+      "present": false,
+      "image": null,
+      "tags": null,
+      "provisioning_state": null,
+      "fqdn": null,
+      "ip": null,
+      "http": null,
+      "deletion_requested": null,
+      "verified_absent": true,
+      "status": "success",
+      "result": null,
+      "error": null
+    },
+    {
+      "pr_number": "7",
+      "resource_name": "preview-pr-7",
+      "present": false,
+      "image": null,
+      "tags": null,
+      "provisioning_state": null,
+      "fqdn": null,
+      "ip": null,
+      "http": null,
+      "deletion_requested": null,
+      "verified_absent": true,
+      "status": "success",
+      "result": null,
+      "error": null
+    }
+  ],
+  "quota": {
+    "status": "unavailable",
+    "limits": null
+  },
+  "status": "success",
+  "error": null
+}

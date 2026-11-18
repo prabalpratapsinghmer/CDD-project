@@ -60,7 +60,8 @@ def verifier(tmp_path):
             'fqdn': 'localhost', 'ip': '127.0.0.1',
             'ports': [{'port': server.server_port}]}) for pr in ('41', '42')]
     env = dict(PATH=str(tmp_path) + os.pathsep + os.defpath,
-               RUNNER_TEMP=str(tmp_path), GITHUB_OUTPUT=str(output),
+               RUNNER_TEMP=str(tmp_path), TMPDIR=str(tmp_path),
+               GITHUB_OUTPUT=str(output),
                STATE=str(state), PR_A='41', PR_B='42',
                EXPECTED_IMAGE_A='ghcr.io/example/app:41',
                EXPECTED_IMAGE_B='ghcr.io/example/app:42',
