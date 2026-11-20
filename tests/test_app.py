@@ -116,3 +116,17 @@ def test_malformed_pr_number_gets_default_tint_and_page_still_renders(
     assert accent_hue(pr_number) == accent_hue('')
     set_build_env(monkeypatch, PR_NUMBER=pr_number)
     assert client.get('/').status_code == 200
+
+
+def test_presentation_preview_banner_and_runtime_facts(client, monkeypatch):
+    local = client.get('/').get_data(as_text=True)
+    assert 'Presentation preview mode' in local
+    assert 'Copy preview link' in local
+    assert '<dt>Container</dt>' in local
+    assert '<dt>Uptime</dt>' in local
+
+    set_build_env(monkeypatch)
+    ci = client.get('/').get_data(as_text=True)
+    assert 'Live presentation preview' in ci
+    assert 'PR #7' in ci
+    assert 'Copy preview link' in ci
